@@ -90,11 +90,14 @@ const RPG_CLASSES = {
 document.addEventListener('DOMContentLoaded', async () => {
   checkGMAuth();
   await fetchAdminData();
+  await fetchCrawlerConfig();
   populateGlobalSettings();
+  populateFormDropdowns();
   onExpansionModeChanged();
   renderSnapshotTable();
   renderHeroTable();
   renderActivityTable();
+  renderCrawlerUI();
   initAdminSSE();
   if (window.lucide) lucide.createIcons();
 });
@@ -117,16 +120,89 @@ function initAdminSSE() {
   } catch (e) {}
 }
 
+const EMBEDDED_DEFAULT_STATE = {
+  activeMode: "world_boss",
+  seasonStart: "2026/08/12",
+  seasonEnd: "2026/08/31",
+  boss: {
+    name: "🌩️ 墮落雷神・索爾 (Fallen Thor)",
+    subtitle: "世界 Boss 討伐戰 (全伺服器合作模式)",
+    maxHp: 350000,
+    currentHp: 232849,
+    seasonStart: "2026/08/12",
+    seasonEnd: "2026/08/31",
+    avatar: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80",
+    description: "索爾受到雷霆魔劍侵蝕陷入瘋狂，諸神黃昏即將降臨！唯有全服英雄透過每日嚴格汗水訓練，轉化為物理與魔法攻擊，方能拯救世界！",
+    rules: { minDurationMinutes: 30.0, physMultiplier: 1.0, magicMultiplier: 15.0, critMultiplier: 100.0 }
+  },
+  guilds: [
+    { name: "Cake", badge: "🍰", color: "#ec4899", members: ["Kerker", "Calla"] },
+    { name: "咪咪胡胡", badge: "🐱", color: "#3b82f6", members: ["Naomi", "Weber"] },
+    { name: "嘿喲嘿喲拔蘿蔔", badge: "🥕", color: "#f97316", members: ["Moupower", "Mooooo"] },
+    { name: "天琳琳地琳琳", badge: "✨", color: "#a855f7", members: ["Richardyoho", "Lynn Chao"] }
+  ],
+  heroes: [
+    { name: "Kerker", guild: "Cake", age: 35, maxHr: 185, rpgClass: "狂戰士" },
+    { name: "Calla", guild: "Cake", age: 35, maxHr: 185, rpgClass: "刺客" },
+    { name: "Naomi", guild: "咪咪胡胡", age: 33, maxHr: 187, rpgClass: "聖騎士" },
+    { name: "Weber", guild: "咪咪胡胡", age: 35, maxHr: 185, rpgClass: "大法師" },
+    { name: "Moupower", guild: "嘿喲嘿喲拔蘿蔔", age: 35, maxHr: 185, rpgClass: "遊俠" },
+    { name: "Mooooo", guild: "嘿喲嘿喲拔蘿蔔", age: 34, maxHr: 186, rpgClass: "狂戰士" },
+    { name: "Richardyoho", guild: "天琳琳地琳琳", age: 36, maxHr: 184, rpgClass: "聖騎士" },
+    { name: "Lynn Chao", guild: "天琳琳地琳琳", age: 32, maxHr: 188, rpgClass: "遊俠" }
+  ],
+  activities: [],
+  snapshots: [],
+  archivedSeasons: []
+};
+
 async function fetchAdminData() {
   try {
-    const res = await fetch('/api/state');
-    gameState = await res.json();
-    allActivitiesCache = gameState?.activities || [];
-    if (!gameState.snapshots && gameState.archivedSeasons) {
-      gameState.snapshots = gameState.archivedSeasons;
+    const res = await fetch("/api/state");
+    if (res.ok) {
+      gameState = await res.json();
+    } else {
+      throw new Error("Local API offline");
     }
   } catch (e) {
-    console.error('Admin fetch error:', e);
+    try {
+      const fbRes = await fetch("/data/game_data.json");
+      if (fbRes.ok) {
+        gameState = await fbRes.json();
+      }
+    } catch (err) {}
+  }
+
+  if (!gameState) {
+    const local = localStorage.getItem("game_state");
+    if (local) {
+      try { gameState = JSON.parse(local); } catch(err) {}
+    }
+  }
+
+  if (!gameState || !gameState.heroes || gameState.heroes.length === 0) {
+    gameState = JSON.parse(JSON.stringify(EMBEDDED_DEFAULT_STATE));
+  }
+
+  allActivitiesCache = gameState?.activities || [];
+  if (!gameState.snapshots && gameState.archivedSeasons) {
+    gameState.snapshots = gameState.archivedSeasons;
+  }
+
+  // If sheetSync is available, trigger background Google Sheet synchronization
+  if (typeof syncFromGoogleSheet === "function") {
+    try {
+      syncFromGoogleSheet().then(() => {
+        if (window.gameState) {
+          gameState = window.gameState;
+          allActivitiesCache = gameState?.activities || [];
+          populateGlobalSettings();
+          populateFormDropdowns();
+          renderHeroTable();
+          renderActivityTable();
+        }
+      }).catch(err => {});
+    } catch(err) {}
   }
 }
 
@@ -1297,9 +1373,17 @@ async function fetchCrawlerConfig() {
       if (data && Object.keys(data).length > 0) {
         crawlerConfig = Object.assign(crawlerConfig, data);
       }
+    } else {
+      throw new Error("Local API offline");
     }
   } catch (e) {
-    console.error("Fetch crawler config error:", e);
+    try {
+      const fbRes = await fetch("/data/crawler_config.json");
+      if (fbRes.ok) {
+        const data = await fbRes.json();
+        if (data) crawlerConfig = Object.assign(crawlerConfig, data);
+      }
+    } catch (err) {}
   }
   renderCrawlerUI();
 }
