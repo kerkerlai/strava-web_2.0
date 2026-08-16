@@ -501,3 +501,8 @@ def run_server():
 
 if __name__ == '__main__':
     run_server()
+
+
+# Vercel entrypoint compatibility
+handler = GameRequestHandler
+app = GameRequestHandler
