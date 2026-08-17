@@ -256,8 +256,8 @@ async function syncFromGoogleSheet() {
       members: guildMembers[gname]
     }));
 
-    const seasonStartStr = gameState?.seasonStart || gameState?.boss?.seasonStart || '2026/07/27';
-    const seasonEndStr = gameState?.seasonEnd || gameState?.boss?.seasonEnd || '2026/09/30';
+    const seasonStartStr = localStorage.getItem("iron_heroes_season_start") || gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
+    const seasonEndStr = localStorage.getItem("iron_heroes_season_end") || gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
     const seasonStartDate = parseActivityDate(seasonStartStr) || new Date(2026, 6, 27);
     const seasonEndDate = parseActivityDate(seasonEndStr) || new Date(2026, 8, 30, 23, 59, 59);
 
@@ -486,8 +486,8 @@ async function syncFromGoogleSheet() {
       heroes: heroes,
       activities: activities,
       classic0717: gameState?.classic0717 || window.frozenClassic0717,
-      snapshots: gameState?.snapshots || gameState?.archivedSeasons || JSON.parse(localStorage.getItem('custom_archived_seasons') || '[]'),
-      archivedSeasons: gameState?.snapshots || gameState?.archivedSeasons || JSON.parse(localStorage.getItem('custom_archived_seasons') || '[]'),
+      snapshots: JSON.parse(localStorage.getItem("custom_archived_seasons") || "null") || gameState?.snapshots || gameState?.archivedSeasons || [],
+      archivedSeasons: JSON.parse(localStorage.getItem("custom_archived_seasons") || "null") || gameState?.snapshots || gameState?.archivedSeasons || [],
       summary: {
         totalPhys: totalSeasonPhys,
         totalMag: totalSeasonMag,

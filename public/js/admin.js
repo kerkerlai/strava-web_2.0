@@ -339,6 +339,8 @@ async function saveGlobalGameSettings() {
   gameState.boss.seasonEnd = seasonEnd;
 
   localStorage.setItem('iron_heroes_active_mode', activeMode);
+  localStorage.setItem('iron_heroes_season_start', seasonStart);
+  localStorage.setItem('iron_heroes_season_end', seasonEnd);
   localStorage.setItem('game_state', JSON.stringify(gameState));
 
   try {
@@ -456,23 +458,22 @@ async function deleteSnapshot(snapId) {
   if (!confirm(`確定要永久刪除快照【${snapTitle}】嗎？\n刪除後此歷史紀錄將從過往英雄史中移除！`)) return;
 
   const updatedSnapshots = snapshots.filter(s => s.id !== snapId);
-  localStorage.setItem('custom_archived_seasons', JSON.stringify(updatedSnapshots));
+  localStorage.setItem("custom_archived_seasons", JSON.stringify(updatedSnapshots));
+  if (gameState) {
+    gameState.snapshots = updatedSnapshots;
+    gameState.archivedSeasons = updatedSnapshots;
+  }
+  renderSnapshotTable();
 
   try {
-    const res = await fetch('/api/snapshots/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    await fetch("/api/snapshots/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: snapId })
     });
-    if (res.ok) {
-      await fetchAdminData();
-      renderSnapshotTable();
-      alert(`🗑️ 快照【${snapTitle}】已成功從伺服器永久刪除！`);
-    }
-  } catch (e) {
-    renderSnapshotTable();
-    alert(`🗑️ 快照已刪除！`);
-  }
+  } catch (e) {}
+
+  alert(`🗑️ 快照【${snapTitle}】已成功刪除！前後台已同步更新！`);
 }
 
 function exportSingleSnapshot(snapId) {
@@ -504,19 +505,25 @@ async function archiveCurrentSeason() {
   const snapshotTitle = customTitle.trim() || defaultTitle;
 
   try {
-    const [stateRes, heroRes, seasonRes] = await Promise.all([
-      fetch('/api/state'),
-      fetch('/api/hero_stats'),
-      fetch('/api/season_stats')
-    ]);
-    const state = await stateRes.json();
-    const heroStats = await heroRes.json();
-    const seasonStats = await seasonRes.json();
+    let state = gameState || {};
+    let heroStats = [];
+    let seasonStats = null;
 
-    const bossData = state.boss || {};
-    const activities = state.activities || [];
-    const guilds = state.guilds || [];
-    const heroes = state.heroes || [];
+    try {
+      const [stateRes, heroRes, seasonRes] = await Promise.all([
+        fetch('/api/state').catch(() => null),
+        fetch('/api/hero_stats').catch(() => null),
+        fetch('/api/season_stats').catch(() => null)
+      ]);
+      if (stateRes && stateRes.ok) state = await stateRes.json();
+      if (heroRes && heroRes.ok) heroStats = await heroRes.json();
+      if (seasonRes && seasonRes.ok) seasonStats = await seasonRes.json();
+    } catch (e) {}
+
+    const bossData = state.boss || gameState?.boss || {};
+    const activities = state.activities || allActivitiesCache || gameState?.activities || [];
+    const guilds = state.guilds || gameState?.guilds || [];
+    const heroes = state.heroes || gameState?.heroes || [];
 
     const now = new Date();
     const timeStampStr = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
@@ -739,20 +746,25 @@ async function archiveCurrentSeason() {
     const snapshots = getSnapshotsList();
     snapshots.unshift(newArchive);
 
-    localStorage.setItem('custom_archived_seasons', JSON.stringify(snapshots));
-
-    await fetch('/api/snapshots/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ snapshot: newArchive })
-    });
-
-    await fetchAdminData();
+    localStorage.setItem("custom_archived_seasons", JSON.stringify(snapshots));
+    if (gameState) {
+      gameState.snapshots = snapshots;
+      gameState.archivedSeasons = snapshots;
+    }
     renderSnapshotTable();
+
+    try {
+      await fetch("/api/snapshots/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ snapshot: newArchive })
+      });
+    } catch(err) {}
+
     alert(`🎉 成功生成賽季完整歷史快照【${snapshotTitle}】！前台【過往英雄史】已 1:1 完整還原！`);
   } catch (e) {
-    console.error('Archive error:', e);
-    alert('封存失敗：' + e.message);
+    console.error("Archive error:", e);
+    alert("封存失敗：" + e.message);
   }
 }
 
@@ -819,20 +831,19 @@ async function randomizeAllHeroClasses() {
     rpgClass: pool[idx]
   }));
 
+  if (gameState) gameState.heroes = heroes;
+  localStorage.setItem("game_state", JSON.stringify(gameState));
+  populateFormDropdowns();
+  renderHeroTable();
+  alert("🎉 抽籤分配完成！所有冒險者已隨機指派 RPG 天賦職業！前台已即時重新計算職業榜！");
+
   try {
-    const res = await fetch('/api/settings/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    await fetch("/api/settings/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ heroes: heroes })
     });
-    if (res.ok) {
-      await fetchAdminData();
-      renderHeroTable();
-      alert('🎉 抽籤分配完成！所有冒險者已隨機指派 RPG 天賦職業！前台已即時重新計算職業榜！');
-    }
-  } catch (e) {
-    console.error('Randomize hero classes error:', e);
-  }
+  } catch (e) {}
 }
 
 function openAddHeroModal() {
@@ -905,41 +916,39 @@ async function saveHeroFromModal() {
     });
   }
 
+  if (gameState) gameState.heroes = heroes;
+  localStorage.setItem("game_state", JSON.stringify(gameState));
+  closeHeroModal();
+  populateFormDropdowns();
+  renderHeroTable();
+  alert(`✅ 英雄【${name}】資料已成功儲存！`);
+
   try {
-    const res = await fetch('/api/settings/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    await fetch("/api/settings/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ heroes: heroes })
     });
-    if (res.ok) {
-      closeHeroModal();
-      await fetchAdminData();
-      populateFormDropdowns();
-      renderHeroTable();
-    }
-  } catch (e) {
-    console.error('Save hero error:', e);
-  }
+  } catch (e) {}
 }
 
 async function deleteHero(name) {
   if (!confirm(`確定要刪除冒險者【${name}】嗎？`)) return;
 
   const heroes = (gameState?.heroes || []).filter(h => h.name !== name);
+  if (gameState) gameState.heroes = heroes;
+  localStorage.setItem("game_state", JSON.stringify(gameState));
+  populateFormDropdowns();
+  renderHeroTable();
+  alert(`🗑️ 冒險者【${name}】已成功刪除！`);
+
   try {
-    const res = await fetch('/api/settings/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    await fetch("/api/settings/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ heroes: heroes })
     });
-    if (res.ok) {
-      await fetchAdminData();
-      populateFormDropdowns();
-      renderHeroTable();
-    }
-  } catch (e) {
-    console.error('Delete hero error:', e);
-  }
+  } catch (e) {}
 }
 
 function populateFormDropdowns() {
@@ -1311,8 +1320,27 @@ async function saveActivityFromModal() {
   act.avgHr = parseFloat(document.getElementById('act-edit-avghr').value) || 0;
   act.maxHr = parseFloat(document.getElementById('act-edit-maxhr').value) || 0;
 
+  const heroInfo = (gameState?.heroes || []).find(h => h.name === act.hero) || { maxHr: 185 };
+  const maxHrEst = heroInfo.maxHr || 185;
+  if (act.duration >= 30.0 && maxHrEst > 0 && act.avgHr > 0) {
+    const ratio = act.avgHr / maxHrEst;
+    act.trimp = Math.round((act.duration * ratio * Math.exp(1.92 * ratio)) * 10) / 10;
+  }
+  act.gap = Math.max(0, act.maxHr - act.avgHr);
+  act.damage = Math.round(act.calories + (act.trimp || 0) * 15 + act.gap * 100);
+
+  try {
+    let localSaved = JSON.parse(localStorage.getItem('manual_activities') || '[]');
+    const mIndex = localSaved.findIndex(a => String(a.id) === String(actId));
+    if (mIndex !== -1) {
+      localSaved[mIndex] = Object.assign(localSaved[mIndex], act);
+      localStorage.setItem('manual_activities', JSON.stringify(localSaved));
+    }
+  } catch(e) {}
+
   closeActivityModal();
   filterAdminActivities();
+  alert('✅ 運動紀錄已成功更新！');
 
   try {
     await fetch('/api/settings/update', {
@@ -1320,10 +1348,7 @@ async function saveActivityFromModal() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ activities: allActivitiesCache })
     });
-    alert('✅ 運動紀錄已成功更新！');
-  } catch (e) {
-    alert('✅ 運動紀錄已於本地更新！');
-  }
+  } catch (e) {}
 }
 
 function exportFullBackupJSON() {

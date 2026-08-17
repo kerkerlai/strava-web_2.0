@@ -589,6 +589,11 @@ function renderClassicModeView() {
 
   if (!champContainer || !metricContainer) return;
 
+  const seasonStartStr = localStorage.getItem("iron_heroes_season_start") || gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
+  const seasonEndStr = localStorage.getItem("iron_heroes_season_end") || gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
+  const classicPeriodEl = document.getElementById("classic-period-text");
+  if (classicPeriodEl) classicPeriodEl.innerText = `競賽區間：${seasonStartStr} ~ ${seasonEndStr}`;
+
   const classicData = calculateLiveClassicMetrics();
   const champs = classicData.champions;
   const metrics = classicData.teamMetrics;
@@ -837,6 +842,11 @@ function renderRPGClassTalentView() {
 
   if (!mastersContainer || !synergyContainer) return;
 
+  const seasonStartStr = localStorage.getItem("iron_heroes_season_start") || gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
+  const seasonEndStr = localStorage.getItem("iron_heroes_season_end") || gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
+  const rpgPeriodEl = document.getElementById("rpg-period-text");
+  if (rpgPeriodEl) rpgPeriodEl.innerText = `修煉區間：${seasonStartStr} ~ ${seasonEndStr}`;
+
   const data = calculateLiveRPGStats();
   const masters = data.classMasters;
   const synergyList = data.guildSynergyList;
@@ -972,8 +982,8 @@ function renderWorldBossView() {
   const avatarEl = document.getElementById('boss-avatar-img');
   if (avatarEl && boss.avatar) avatarEl.src = boss.avatar;
 
-  const seasonStart = gameState?.seasonStart || boss.seasonStart || "2026/08/12";
-  const seasonEnd = gameState?.seasonEnd || boss.seasonEnd || "2026/08/31";
+  const seasonStart = localStorage.getItem("iron_heroes_season_start") || gameState?.seasonStart || boss.seasonStart || "2026/08/12";
+  const seasonEnd = localStorage.getItem("iron_heroes_season_end") || gameState?.seasonEnd || boss.seasonEnd || "2026/08/31";
 
   const seasonPeriodEl = document.getElementById("boss-season-period");
   if (seasonPeriodEl) seasonPeriodEl.innerText = `討伐戰區間：${seasonStart} ~ ${seasonEnd}`;
