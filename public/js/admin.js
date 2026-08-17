@@ -837,22 +837,15 @@ async function archiveCurrentSeason() {
     const snapshots = getSnapshotsList();
     snapshots.unshift(newArchive);
 
-    localStorage.setItem("custom_archived_seasons", JSON.stringify(snapshots));
-    if (gameState) {
-      gameState.snapshots = snapshots;
-      gameState.archivedSeasons = snapshots;
-    }
-    renderSnapshotTable();
-
     try {
-      await fetch("/api/snapshots/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ snapshot: newArchive })
-      });
-    } catch(err) {}
-
-    alert(`🎉 成功生成賽季完整歷史快照【${snapshotTitle}】！前台【過往英雄史】已 1:1 完整還原！`);
+      await window.supabase.insert("game_config", { key: "snapshots", value: snapshots });
+      if (window.syncFromDatabase) await window.syncFromDatabase();
+      renderSnapshotTable();
+      alert(`🎉 成功生成賽季完整歷史快照【${snapshotTitle}】並同步寫入 Supabase 雲端資料庫！前台【過往英雄史】已永久保存！`);
+    } catch (err) {
+      console.error("Archive Save Error:", err);
+      alert("❌ 封存快照寫入雲端失敗：" + err.message);
+    }
   } catch (e) {
     console.error("Archive error:", e);
     alert("封存失敗：" + e.message);
@@ -883,22 +876,25 @@ function renderHeroTable() {
       classCellHtml = `<span class="px-2 py-0.5 rounded text-[11px] font-bold text-rose-400 bg-rose-950/40 border border-rose-800">⚔️ 討伐先鋒</span>`;
     }
 
+    const stravaIdDisplay = h.stravaId ? 
+      `<a href="https://www.strava.com/athletes/${h.stravaId}" target="_blank" class="font-mono text-cyan-400 font-bold hover:underline">#${h.stravaId} ↗</a>` : 
+      `<span class="text-slate-500 italic">未綁定</span>`;
+
     tr.innerHTML = `
       <td class="p-3 font-bold text-white flex items-center space-x-2">
         <div class="w-7 h-7 rounded-lg bg-slate-800 overflow-hidden border border-slate-700">
           <img src="${h.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${h.name}`}" class="w-full h-full object-cover">
         </div>
         <span>${h.name}</span>
-        ${h.isAutoDiscovered ? '<span class="text-[9px] bg-purple-900/60 text-purple-300 border border-purple-500/40 px-1.5 py-0.5 rounded">自動發現</span>' : ''}
       </td>
       <td class="p-3 font-mono">${h.age} 歲</td>
       <td class="p-3 font-mono text-cyan-400 font-bold">${h.maxHr} bpm</td>
       <td class="p-3"><span class="bg-slate-800 text-amber-300 px-2 py-0.5 rounded text-[11px]">${h.guild}</span></td>
       <td class="p-3">${classCellHtml}</td>
-      <td class="p-3 text-right">
-        <a href="https://docs.google.com/spreadsheets/d/1gNr8ptE_zjIeZsliaEqddqp5xz3Ir0LT7AkLmnSh3pY/edit#gid=434984273" target="_blank" class="inline-flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 font-bold text-xs bg-emerald-950/40 border border-emerald-800/60 px-2.5 py-1 rounded-lg transition" title="前往 Google Sheet 修改此成員的年齡、公會、職業或 Strava ID">
-          <span>在 Sheet 編輯 ↗</span>
-        </a>
+      <td class="p-3">${stravaIdDisplay}</td>
+      <td class="p-3 text-right space-x-1.5">
+        <button onclick="openEditHeroModal('${h.name}')" class="px-2.5 py-1 bg-cyan-950/60 text-cyan-300 border border-cyan-800/60 hover:bg-cyan-900 rounded-lg text-xs font-bold transition">✏️ 編輯</button>
+        <button onclick="deleteHero('${h.name}')" class="px-2.5 py-1 bg-rose-950/60 text-rose-300 border border-rose-800/60 hover:bg-rose-900 rounded-lg text-xs font-bold transition">🗑️ 刪除</button>
       </td>
     `;
 
@@ -918,24 +914,19 @@ async function randomizeAllHeroClasses() {
     pool = pool.concat([...classes].sort(() => Math.random() - 0.5));
   }
 
-  heroes = heroes.map((h, idx) => ({
-    ...h,
-    rpgClass: pool[idx]
-  }));
-
-  if (gameState) gameState.heroes = heroes;
-  localStorage.setItem("game_state", JSON.stringify(gameState));
-  populateFormDropdowns();
-  renderHeroTable();
-  alert("🎉 抽籤分配完成！所有冒險者已隨機指派 RPG 天賦職業！前台已即時重新計算職業榜！");
-
   try {
-    await fetch("/api/settings/update", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ heroes: heroes })
-    });
-  } catch (e) {}
+    for (let i = 0; i < heroes.length; i++) {
+      const assignedClass = pool[i];
+      await window.supabase.update("heroes", `name=eq.${encodeURIComponent(heroes[i].name)}`, {
+        rpg_class: assignedClass
+      });
+    }
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    alert("🎉 隨機抽籤分配完成！所有冒險者天賦已更新並寫入 Supabase 資料庫！全服即刻生效！");
+  } catch (e) {
+    console.error("Randomize Classes Error:", e);
+    alert("❌ 職業分配失敗：" + e.message);
+  }
 }
 
 function openAddHeroModal() {
@@ -962,6 +953,8 @@ function openEditHeroModal(heroName) {
   document.getElementById('hero-modal-age').value = hero.age;
   document.getElementById('hero-modal-guild').value = hero.guild;
   document.getElementById('hero-modal-class').value = hero.rpgClass || '狂戰士';
+  const stravaInput = document.getElementById('hero-modal-strava-id');
+  if (stravaInput) stravaInput.value = hero.stravaId || '';
   updateModalMaxHr();
   document.getElementById('modal-hero').classList.remove('hidden');
   if (window.lucide) lucide.createIcons();
@@ -983,6 +976,7 @@ async function saveHeroFromModal() {
   const age = parseInt(document.getElementById('hero-modal-age').value) || 35;
   const guild = document.getElementById('hero-modal-guild').value.trim() || '自由英雄';
   const rpgClass = document.getElementById('hero-modal-class').value;
+  const stravaId = (document.getElementById('hero-modal-strava-id')?.value || "").trim();
   const maxHr = 220 - age;
 
   if (!name) {
@@ -990,57 +984,40 @@ async function saveHeroFromModal() {
     return;
   }
 
-  let heroes = [...(gameState?.heroes || [])];
-  if (origName) {
-    heroes = heroes.map(h => h.name === origName ? { ...h, age, maxHr, guild, rpgClass, isAutoDiscovered: false } : h);
-  } else {
-    if (heroes.some(h => h.name === name)) {
-      alert('該英雄名稱已存在！');
-      return;
-    }
-    heroes.push({
-      name: name,
-      age: age,
-      maxHr: maxHr,
-      guild: guild,
-      rpgClass: rpgClass,
-      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${name}&backgroundColor=0f172a`
-    });
-  }
-
-  if (gameState) gameState.heroes = heroes;
-  localStorage.setItem("game_state", JSON.stringify(gameState));
-  closeHeroModal();
-  populateFormDropdowns();
-  renderHeroTable();
-  alert(`✅ 英雄【${name}】資料已成功儲存！`);
+  const heroObj = {
+    name: name,
+    age: age,
+    max_hr: maxHr,
+    guild: guild,
+    rpg_class: rpgClass,
+    strava_id: stravaId,
+    avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${name}&backgroundColor=0f172a`
+  };
 
   try {
-    await fetch("/api/settings/update", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ heroes: heroes })
-    });
-  } catch (e) {}
+    await window.supabase.insert("heroes", heroObj);
+    closeHeroModal();
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    alert(`🎉 冒險者【${name}】已成功儲存至 Supabase 雲端資料庫！全站即刻同步！`);
+    showAdminToast(`已儲存冒險者：${name}`);
+  } catch (e) {
+    console.error("Save Hero Error:", e);
+    alert("❌ 儲存失敗：" + e.message);
+  }
 }
 
 async function deleteHero(name) {
-  if (!confirm(`確定要刪除冒險者【${name}】嗎？`)) return;
-
-  const heroes = (gameState?.heroes || []).filter(h => h.name !== name);
-  if (gameState) gameState.heroes = heroes;
-  localStorage.setItem("game_state", JSON.stringify(gameState));
-  populateFormDropdowns();
-  renderHeroTable();
-  alert(`🗑️ 冒險者【${name}】已成功刪除！`);
+  if (!confirm(`確定要從 Supabase 雲端資料庫徹底刪除冒險者【${name}】嗎？`)) return;
 
   try {
-    await fetch("/api/settings/update", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ heroes: heroes })
-    });
-  } catch (e) {}
+    await window.supabase.delete("heroes", `name=eq.${encodeURIComponent(name)}`);
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    alert(`🗑️ 冒險者【${name}】已成功自雲端資料庫刪除！`);
+    showAdminToast(`已刪除冒險者：${name}`);
+  } catch (e) {
+    console.error("Delete Hero Error:", e);
+    alert("❌ 刪除失敗：" + e.message);
+  }
 }
 
 function populateFormDropdowns() {
@@ -1330,56 +1307,26 @@ function filterAdminActivities() {
 }
 
 async function toggleExcludeActivity(actId, shouldExclude) {
-  let excluded = JSON.parse(localStorage.getItem('excluded_activity_ids') || '[]');
-  if (shouldExclude) {
-    if (!excluded.includes(actId)) excluded.push(actId);
-  } else {
-    excluded = excluded.filter(id => id !== actId);
-  }
-  localStorage.setItem('excluded_activity_ids', JSON.stringify(excluded));
-
-  // Update in local cache
-  const act = allActivitiesCache.find(a => String(a.id) === String(actId));
-  if (act) act.isExcluded = shouldExclude;
-  filterAdminActivities();
-
-  // Send permanent server exclusion
   try {
-    const res = await fetch('/api/activities/exclude', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: actId, isExcluded: shouldExclude })
-    });
-    if (res.ok) {
-      alert(shouldExclude ? `🚫 紀錄 #${actId} 已永久設為作廢，不再計入分數！` : `✅ 紀錄 #${actId} 已恢復計入分數！`);
-    }
+    await window.supabase.update("activities", `id=eq.${encodeURIComponent(actId)}`, { is_excluded: shouldExclude });
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    alert(shouldExclude ? `🚫 紀錄 #${actId} 已在 Supabase 資料庫設為作廢，不再計入分數！` : `✅ 紀錄 #${actId} 已在 Supabase 資料庫恢復計入分數！`);
   } catch (e) {
-    alert(shouldExclude ? `🚫 紀錄 #${actId} 已設為作廢！` : `✅ 紀錄 #${actId} 已恢復！`);
+    console.error("Toggle Exclude Error:", e);
+    alert("❌ 操作失敗：" + e.message);
   }
 }
 
 async function deleteManualActivity(actId) {
-  if (!confirm(`確定要永久刪除手動補登紀錄 #${actId} 嗎？`)) return;
+  if (!confirm(`確定要從 Supabase 雲端資料庫永久刪除紀錄 #${actId} 嗎？`)) return;
 
-  let localSaved = JSON.parse(localStorage.getItem('manual_activities') || '[]');
-  localSaved = localSaved.filter(a => String(a.id) !== String(actId));
-  localStorage.setItem('manual_activities', JSON.stringify(localSaved));
-
-  allActivitiesCache = allActivitiesCache.filter(a => String(a.id) !== String(actId));
-  filterAdminActivities();
-
-  // Send permanent server deletion
   try {
-    const res = await fetch('/api/activities/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: actId })
-    });
-    if (res.ok) {
-      alert(`🗑️ 紀錄 #${actId} 已從伺服器永久刪除，重新整理也不會再出現！`);
-    }
+    await window.supabase.delete("activities", `id=eq.${encodeURIComponent(actId)}`);
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    alert(`🗑️ 紀錄 #${actId} 已從 Supabase 雲端資料庫永久刪除！`);
   } catch (e) {
-    alert(`🗑️ 紀錄已刪除！`);
+    console.error("Delete Activity Error:", e);
+    alert("❌ 刪除失敗：" + e.message);
   }
 }
 
