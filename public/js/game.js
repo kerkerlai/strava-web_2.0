@@ -595,8 +595,8 @@ function renderClassicModeView() {
 
   if (!champContainer || !metricContainer) return;
 
-  const seasonStartStr = localStorage.getItem("iron_heroes_season_start") || gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
-  const seasonEndStr = localStorage.getItem("iron_heroes_season_end") || gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
+  const seasonStartStr = gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
+  const seasonEndStr = gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
   const classicPeriodEl = document.getElementById("classic-period-text");
   if (classicPeriodEl) classicPeriodEl.innerText = `競賽區間：${seasonStartStr} ~ ${seasonEndStr}`;
 
@@ -848,8 +848,8 @@ function renderRPGClassTalentView() {
 
   if (!mastersContainer || !synergyContainer) return;
 
-  const seasonStartStr = localStorage.getItem("iron_heroes_season_start") || gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
-  const seasonEndStr = localStorage.getItem("iron_heroes_season_end") || gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
+  const seasonStartStr = gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
+  const seasonEndStr = gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
   const rpgPeriodEl = document.getElementById("rpg-period-text");
   if (rpgPeriodEl) rpgPeriodEl.innerText = `修煉區間：${seasonStartStr} ~ ${seasonEndStr}`;
 
@@ -988,8 +988,8 @@ function renderWorldBossView() {
   const avatarEl = document.getElementById('boss-avatar-img');
   if (avatarEl && boss.avatar) avatarEl.src = boss.avatar;
 
-  const seasonStart = localStorage.getItem("iron_heroes_season_start") || gameState?.seasonStart || boss.seasonStart || "2026/08/12";
-  const seasonEnd = localStorage.getItem("iron_heroes_season_end") || gameState?.seasonEnd || boss.seasonEnd || "2026/08/31";
+  const seasonStart = gameState?.seasonStart || boss.seasonStart || "2026/08/12";
+  const seasonEnd = gameState?.seasonEnd || boss.seasonEnd || "2026/08/31";
 
   const seasonPeriodEl = document.getElementById("boss-season-period");
   if (seasonPeriodEl) seasonPeriodEl.innerText = `討伐戰區間：${seasonStart} ~ ${seasonEnd}`;
@@ -1144,8 +1144,8 @@ function loadHeroViewerData() {
   const heroActs = (gameState?.activities || []).filter(a => a.hero === selectedViewerHero);
   const heroStat = heroStatsList?.find(h => h.name === selectedViewerHero) || {};
 
-  const seasonStartStr = localStorage.getItem("iron_heroes_season_start") || gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
-  const seasonEndStr = localStorage.getItem("iron_heroes_season_end") || gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
+  const seasonStartStr = gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
+  const seasonEndStr = gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
   const startD = parseActivityDate(seasonStartStr);
   const endD = parseActivityDate(seasonEndStr);
   if (endD) endD.setHours(23, 59, 59, 999);
@@ -1428,8 +1428,8 @@ function openHeroDetailModal(heroName) {
   const heroActs = (gameState?.activities || []).filter(a => (a.hero || "").trim() === cleanName);
   const cls = RPG_CLASSES[hero.rpgClass || "狂戰士"] || RPG_CLASSES["狂戰士"];
 
-  const seasonStartStr = localStorage.getItem("iron_heroes_season_start") || gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
-  const seasonEndStr = localStorage.getItem("iron_heroes_season_end") || gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
+  const seasonStartStr = gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
+  const seasonEndStr = gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
   const startD = parseActivityDate(seasonStartStr);
   const endD = parseActivityDate(seasonEndStr);
   if (endD) endD.setHours(23, 59, 59, 999);

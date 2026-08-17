@@ -538,8 +538,8 @@ async function archiveCurrentSeason() {
 
     const curStartRaw = document.getElementById("cfg-season-start")?.value;
     const curEndRaw = document.getElementById("cfg-season-end")?.value;
-    const activeStartStr = (curStartRaw ? inputValToDate(curStartRaw) : null) || localStorage.getItem("iron_heroes_season_start") || gameState?.seasonStart || state?.seasonStart || "2026/08/12";
-    const activeEndStr = (curEndRaw ? inputValToDate(curEndRaw) : null) || localStorage.getItem("iron_heroes_season_end") || gameState?.seasonEnd || state?.seasonEnd || "2026/08/31";
+    const activeStartStr = (curStartRaw ? inputValToDate(curStartRaw) : null) || gameState?.seasonStart || "2026/08/12";
+    const activeEndStr = (curEndRaw ? inputValToDate(curEndRaw) : null) || gameState?.seasonEnd || "2026/08/31";
 
     const bossData = state.boss || gameState?.boss || {};
     bossData.seasonStart = activeStartStr;

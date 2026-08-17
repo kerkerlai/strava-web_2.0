@@ -289,21 +289,28 @@ async function syncFromDatabase() {
     const bossMaxHp = bossConfig.maxHp || 350000;
     const bossCurrentHp = Math.max(0, bossMaxHp - totalSeasonDmg);
 
+    const liveClassic = { ...classicConfig, seasonStart: seasonStartStr, seasonEnd: seasonEndStr };
+    const liveRpg = { ...rpgConfig, seasonStart: seasonStartStr, seasonEnd: seasonEndStr };
+    const liveBoss = {
+      ...bossConfig,
+      name: bossConfig.name || '🌩️ 墮落雷神・索爾 (Fallen Thor)',
+      subtitle: '世界 Boss 討伐戰 (全伺服器合作模式)',
+      maxHp: bossMaxHp,
+      currentHp: bossCurrentHp,
+      seasonStart: seasonStartStr,
+      seasonEnd: seasonEndStr,
+      avatar: bossConfig.avatar || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80',
+      description: bossConfig.description || '索爾受到雷霆魔劍侵蝕陷入瘋狂！全服英雄透過每日嚴格汗水鍛鍊（單次達 30 分鐘），轉化為物理與魔法攻擊！',
+      rules: bossConfig.rules || { minDurationMinutes: 30.0, physMultiplier: 1.0, magicMultiplier: 15.0, critMultiplier: 100.0 }
+    };
+
     gameState = {
       activeMode: activeMode,
-      boss: {
-        name: bossConfig.name || '🌩️ 墮落雷神・索爾 (Fallen Thor)',
-        subtitle: '世界 Boss 討伐戰 (全伺服器合作模式)',
-        maxHp: bossMaxHp,
-        currentHp: bossCurrentHp,
-        seasonStart: seasonStartStr,
-        seasonEnd: seasonEndStr,
-        avatar: bossConfig.avatar || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80',
-        description: bossConfig.description || '索爾受到雷霆魔劍侵蝕陷入瘋狂！全服英雄透過每日嚴格汗水鍛鍊（單次達 30 分鐘），轉化為物理與魔法攻擊！',
-        rules: bossConfig.rules || { minDurationMinutes: 30.0, physMultiplier: 1.0, magicMultiplier: 15.0, critMultiplier: 100.0 }
-      },
-      classic: classicConfig,
-      rpg: rpgConfig,
+      seasonStart: seasonStartStr,
+      seasonEnd: seasonEndStr,
+      boss: liveBoss,
+      classic: liveClassic,
+      rpg: liveRpg,
       guilds: guilds,
       heroes: heroes,
       activities: activities,
