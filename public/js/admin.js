@@ -533,6 +533,7 @@ async function archiveCurrentSeason() {
 
     // 1. CLASSIC MODE SNAPSHOT (直接克隆當前已運算好的經典競技完整狀態)
     if (activeMode === 'classic') {
+      const classicStats = (window.calculateLiveClassicStats ? window.calculateLiveClassicStats(gameState) : null) || gameState?.classic || {};
       newArchive = {
         id: `snapshot_classic_${Date.now()}`,
         type: 'classic',
@@ -542,16 +543,17 @@ async function archiveCurrentSeason() {
         status: 'completed',
         statusLabel: '🏁 本賽季已圓滿結算 (歷史數據已凍結)',
         isVisible: true,
-        classicData: JSON.parse(JSON.stringify(gameState?.classic || {})),
-        champions: JSON.parse(JSON.stringify(gameState?.classic?.champions || {})),
-        teamMetrics: JSON.parse(JSON.stringify(gameState?.classic?.teamMetrics || [])),
-        guildList: JSON.parse(JSON.stringify(gameState?.classic?.guildList || [])),
-        heroList: JSON.parse(JSON.stringify(gameState?.classic?.heroList || []))
+        classicData: classicStats,
+        champions: classicStats.champions || {},
+        teamMetrics: classicStats.teamMetrics || [],
+        guildList: classicStats.guildList || [],
+        heroList: classicStats.heroList || []
       };
     }
 
     // 2. RPG CLASS & TALENT SNAPSHOT (直接克隆當前已運算好的 RPG 完整狀態)
     else if (activeMode === 'rpg_talent' || activeMode === 'rpg') {
+      const rpgStats = (window.calculateLiveRPGStats ? window.calculateLiveRPGStats(gameState) : null) || gameState?.rpg || {};
       newArchive = {
         id: `snapshot_rpg_${Date.now()}`,
         type: 'rpg',
@@ -561,9 +563,9 @@ async function archiveCurrentSeason() {
         status: 'completed',
         statusLabel: '🏁 本賽季職業爭霸已圓滿結算封存',
         isVisible: true,
-        classMasters: JSON.parse(JSON.stringify(gameState?.rpg?.classMasters || {})),
-        guildSynergyList: JSON.parse(JSON.stringify(gameState?.rpg?.guildSynergyList || [])),
-        heroRpgList: JSON.parse(JSON.stringify(gameState?.rpg?.heroRpgList || []))
+        classMasters: rpgStats.classMasters || {},
+        guildSynergyList: rpgStats.guildSynergyList || [],
+        heroRpgList: rpgStats.heroRpgList || []
       };
     }
 

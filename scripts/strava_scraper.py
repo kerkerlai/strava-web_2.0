@@ -76,10 +76,10 @@ def calculate_calories(avg_hr, duration_mins):
     try:
         hr = float(avg_hr)
         dur = float(duration_mins)
-        cal = ((-55.0969 + (0.6309 * hr) + (0.1988 * 70) + (0.2017 * 30)) / 4.184) * dur
-        return str(max(10, round(cal)))
+        c = ((-59.0 + (0.45 * hr) + (0.074 * 55) + (0.274 * 34)) / 4.184) * dur
+        return max(int(round(c)), int(round(dur * 4.0)))
     except Exception:
-        return ""
+        return int(round(float(duration_mins) * 4.5))
 
 def fetch_interval_activities(ath_id, ym, headers):
     """透過月份區間 API 抓取該選手該月份的所有活動"""
@@ -238,8 +238,32 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
                 except Exception:
                     pass
 
+            # --- Streams 數據流核實與補充 (權威秒級來源) ---
+            if not avg_hr or not max_hr or not moving_time_mins or not calories:
+                try:
+                    streams_url = f"https://www.strava.com/activities/{act_id}/streams?stream_types%5B%5D=heartrate&stream_types%5B%5D=time&stream_types%5B%5D=distance"
+                    s_resp = requests.get(streams_url, headers=headers, timeout=10)
+                    if s_resp.status_code == 200:
+                        s_data = s_resp.json()
+                        hr_list = s_data.get("heartrate", [])
+                        time_list = s_data.get("time", [])
+                        dist_list = s_data.get("distance", [])
+
+                        if hr_list and not avg_hr:
+                            avg_hr = round(sum(hr_list) / len(hr_list))
+                        if hr_list and not max_hr:
+                            max_hr = max(hr_list)
+                        if time_list and not moving_time_mins:
+                            moving_time_mins = round(time_list[-1] / 60.0)
+                        if dist_list and not distance_km:
+                            distance_km = round(dist_list[-1] / 1000.0, 2)
+                        print(f"    📡 Streams 補充 -> 時長: {moving_time_mins}分, 平均HR: {avg_hr} bpm, 最大HR: {max_hr} bpm, 距離: {distance_km} km")
+                except Exception as e:
+                    print(f"    ⚠️ Streams 讀取異常: {e}")
+
             if not calories and avg_hr and moving_time_mins:
-                calories = int(calculate_calories(avg_hr, moving_time_mins) or 0)
+                calories = calculate_calories(avg_hr, moving_time_mins)
+                print(f"    🔥 依心率自動推算熱量: {calories} kcal")
 
             if not start_time_readable:
                 start_time_readable = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
