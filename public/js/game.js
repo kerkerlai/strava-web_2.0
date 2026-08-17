@@ -391,6 +391,12 @@ function initRealtimeSSE() {
 }
 
 function renderAllGameViews() {
+  if (window.gameState) gameState = window.gameState;
+  if (window.heroStatsList && window.heroStatsList.length > 0) {
+    heroStatsList = window.heroStatsList;
+  } else if (gameState?.heroStats && gameState.heroStats.length > 0) {
+    heroStatsList = gameState.heroStats;
+  }
   if (!gameState) return;
 
   const activeMode = gameState?.activeMode || "classic";
@@ -1571,18 +1577,10 @@ function closeHeroProfileModal() {
 // -------------------------------------------------------------
 
 function getAllSnapshots() {
-  let list = gameState?.snapshots || gameState?.archivedSeasons || [];
-  if (list.length === 0) {
-    const local = localStorage.getItem('custom_archived_seasons');
-    if (local) {
-      try { list = JSON.parse(local); } catch(e){}
-    }
-  }
-
+  let list = [...(gameState?.snapshots || gameState?.archivedSeasons || [])];
   if (!list.some(s => s.id === 'classic_0717')) {
     list.unshift(window.frozenClassic0717);
   }
-
   return list;
 }
 
@@ -2268,3 +2266,12 @@ async function captureCurrentLiveSnapshot(customName) {
   }
 }
 window.captureCurrentLiveSnapshot = captureCurrentLiveSnapshot;
+
+
+window.addEventListener("gameStateSynced", (e) => {
+  if (e.detail) {
+    gameState = e.detail;
+    if (gameState.heroStats) heroStatsList = gameState.heroStats;
+    renderAllGameViews();
+  }
+});

@@ -393,13 +393,9 @@ async function saveGlobalGameSettings() {
 // -------------------------------------------------------------
 
 function getSnapshotsList() {
-  let list = [];
-  const local = localStorage.getItem('custom_archived_seasons');
-  if (local) {
-    try { list = JSON.parse(local); } catch(e){}
-  }
-  if (!list || list.length === 0) {
-    list = gameState?.snapshots || gameState?.archivedSeasons || [];
+  let list = [...(gameState?.snapshots || gameState?.archivedSeasons || [])];
+  if (!list.some(s => s.id === 'classic_0717')) {
+    list.unshift(window.frozenClassic0717);
   }
   return list;
 }
@@ -1624,10 +1620,10 @@ async function runCrawlerNow() {
 💡 隨時「立即手動抓取」最新運動步驟：
 1. 請開啟您的 GitHub Repository Actions 頁面：
    👉 https://github.com/kerkerlai/strava-web_2.0/actions
-2. 點選左側工作流【Strava to Google Sheet Crawler】
-3. 點選右側藍色【Run workflow】按鈕 ➔ 雲端將在 30 秒內完成抓取並自動寫入 Google Sheet！
+2. 點選左側工作流【Strava to Supabase Cloud Crawler】
+3. 點選右側藍色【Run workflow】按鈕 ➔ 雲端將在 30 秒內自動爬取並寫入 Supabase 資料庫！
 
-抓取完成後，回到本網頁點擊右上角【🔄 同步 Sheet】，即可即時更新最新戰況！`;
+寫入完成後，全體玩家打開網頁即可秒速看到最新戰況！`;
   }
 }
 

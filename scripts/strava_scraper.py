@@ -5,7 +5,7 @@ import sys
 import json
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import datetime
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://yxkvbkfnlqwlybhmugki.supabase.co").strip().rstrip("/")
 SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY", os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4a3Zia2ZubHF3bHliaG11Z2tpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5NDIyODYsImV4cCI6MjEwMjUxODI4Nn0.Jky4o080Gn9-prx-G0aj7dCl7rmA1dJWN3BZgkVmjwo")).strip()
@@ -18,7 +18,7 @@ SUPABASE_HEADERS = {
 }
 
 def load_heroes_from_supabase():
-    """從 Supabase 取得所有冒險者及其 Strava ID"""
+    """從 Supabase heroes 表動態取得所有冒險者及其 Strava 數字 ID (完全無 Hardcode)"""
     url = f"{SUPABASE_URL}/rest/v1/heroes?select=*"
     try:
         r = requests.get(url, headers=SUPABASE_HEADERS, timeout=10)
@@ -31,22 +31,29 @@ def load_heroes_from_supabase():
                     profiles[sid] = h.get("name")
             print(f"👥 [Supabase] 成功載入 {len(profiles)} 位已綁定 Strava ID 的英雄選手：{list(profiles.values())}")
             return profiles
+        else:
+            print(f"❌ 讀取 Supabase heroes 失敗 (HTTP {r.status_code}): {r.text}")
     except Exception as e:
-        print(f"⚠️ 無法從 Supabase 取得英雄列表: {e}")
+        print(f"❌ 連線 Supabase 異常: {e}")
+    return {}
 
-    # Fallback to local default
-    return {
-        "468395126": "Kerker",
-        "972959242": "Calla",
-        "449473529": "Naomi",
-        "2029007949": "Weber",
-        "822925839": "Mooooo",
-        "387396829": "Moupower",
-        "548067864": "Richardyoho"
-    }
+def load_exclude_keywords_from_supabase():
+    """從 Supabase game_config 表動態取得排除關鍵字"""
+    url = f"{SUPABASE_URL}/rest/v1/game_config?key=eq.exclude_keywords"
+    try:
+        r = requests.get(url, headers=SUPABASE_HEADERS, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            if data and "value" in data[0]:
+                kws = data[0]["value"]
+                print(f"⚙️ [Supabase] 成功載入排除關鍵字設定：{kws}")
+                return kws
+    except Exception as e:
+        print(f"⚠️ 無法取得排除關鍵字: {e}")
+    return ["羽球"]
 
 def get_existing_activity_ids():
-    """從 Supabase 取得所有已存在的活動 ID 避免重複抓取"""
+    """從 Supabase activities 表取得所有現存活動 ID，避免重複寫入"""
     url = f"{SUPABASE_URL}/rest/v1/activities?select=id"
     try:
         r = requests.get(url, headers=SUPABASE_HEADERS, timeout=10)
@@ -68,6 +75,10 @@ def calculate_calories(avg_hr, duration_mins):
         return ""
 
 def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
+    if not athlete_profiles:
+        print("⚠️ 目前 Supabase 中無任何綁定 Strava ID 的選手，結束本次爬取。")
+        return
+
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Cookie": strava_cookie,
@@ -78,7 +89,7 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
     existing_ids = get_existing_activity_ids()
     new_activities_to_insert = []
 
-    print(f"🚀 開始爬取 {len(athlete_profiles)} 位選手的最新運動...")
+    print(f"🚀 開始動態爬取 {len(athlete_profiles)} 位選手的最新運動...")
 
     for ath_id, member_name in athlete_profiles.items():
         print(f"\n🔍 正在爬取選手：{member_name} (Strava ID: #{ath_id})...")
@@ -121,7 +132,6 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
 
                 d_soup = BeautifulSoup(detail_resp.text, "html.parser")
 
-                # Extract time, type, duration, distance, heart rate, calories
                 sport_type = "Workout"
                 moving_time_mins = 0
                 distance_km = 0
@@ -130,12 +140,12 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
                 max_hr = 0
                 calories = 0
 
-                # Try finding sport type
+                # Sport type
                 type_el = d_soup.select_one(".activity-type, .inline-stats")
                 if type_el:
                     sport_type = type_el.text.strip().split()[0]
 
-                # Parse stats table
+                # Stats table
                 stat_spans = d_soup.select(".inline-stats li, .stats li, [data-testid=stat]")
                 for li in stat_spans:
                     txt = li.text.strip()
@@ -158,7 +168,23 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
                 if not calories and avg_hr and moving_time_mins:
                     calories = int(calculate_calories(avg_hr, moving_time_mins) or 0)
 
-                start_time_readable = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+                # Extract exact activity date from <time> tag
+                time_el = d_soup.select_one("time, .timestamp, [data-testid=date_time]")
+                start_time_readable = None
+                if time_el:
+                    dt_attr = time_el.get("datetime", "")
+                    if dt_attr:
+                        try:
+                            clean_dt = dt_attr.replace("Z", "+00:00")
+                            dt_obj = datetime.fromisoformat(clean_dt)
+                            start_time_readable = dt_obj.strftime("%Y/%m/%d %H:%M:%S")
+                        except Exception:
+                            pass
+                    if not start_time_readable and time_el.text.strip():
+                        start_time_readable = time_el.text.strip()
+
+                if not start_time_readable:
+                    start_time_readable = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
 
                 act_data = {
                     "id": act_id,
@@ -178,7 +204,7 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
 
                 new_activities_to_insert.append(act_data)
                 existing_ids.add(act_id)
-                print(f"  ✨ 成功抓取新運動：{member_name} | {act_name} | 時長: {moving_time_mins}分 | 平均心率: {avg_hr} bpm | 熱量: {calories}卡")
+                print(f"  ✨ 成功抓取新運動：{member_name} | {act_name} | 時間: {start_time_readable} | 時長: {moving_time_mins}分 | 平均心率: {avg_hr} bpm | 熱量: {calories}卡")
 
                 time.sleep(1)
 
@@ -201,11 +227,11 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
         print("\n✅ 本次檢查無新活動需要寫入，全服數據已是最新狀態！")
 
 if __name__ == "__main__":
-    print("=== Strava 雲端爬蟲 (Supabase 雲端資料庫直連版) 啟動 ===")
+    print("=== Strava 雲端爬蟲 (Supabase 雲端資料庫 100% 動態直連版) 啟動 ===")
     STRAVA_COOKIE = os.environ.get("STRAVA_COOKIE", "").strip()
     if not STRAVA_COOKIE:
         print("❌ 警告：未提供 STRAVA_COOKIE 環境變數，請在 GitHub Secrets 設定。")
     
     heroes = load_heroes_from_supabase()
-    exclude_keywords = ["羽球", "不想抓的關鍵字"]
+    exclude_keywords = load_exclude_keywords_from_supabase()
     scrape_strava_activities(STRAVA_COOKIE, heroes, exclude_keywords)
