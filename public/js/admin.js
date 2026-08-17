@@ -751,38 +751,48 @@ async function archiveCurrentSeason() {
       };
     }
 
-    // 3. WORLD BOSS SNAPSHOT (1:1 with World Boss View)
+    // 3. WORLD BOSS SNAPSHOT (1:1 with Live World Boss View)
     else {
-      const totalPhys = inSeasonValidActs.reduce((s, a) => s + (a.physDmg || a.calories || 0), 0);
-      const totalMag = inSeasonValidActs.reduce((s, a) => s + (a.magDmg || 0), 0);
-      const totalCrit = inSeasonValidActs.reduce((s, a) => s + (a.critDmg || 0), 0);
-      const totalDamage = inSeasonValidActs.reduce((s, a) => s + (a.damage || 0), 0);
+      const physMult = bossData?.rules?.physMultiplier || 1.0;
+      const magMult = bossData?.rules?.magicMultiplier || 15.0;
+      const critMult = bossData?.rules?.critMultiplier || 100.0;
+
+      const sortedHeroes = heroes.map(h => {
+        const hActs = inSeasonValidActs.filter(a => a.hero === h.name);
+        const physDmg = hActs.reduce((s, a) => s + Math.round((a.calories || 0) * physMult), 0);
+        const magDmg = hActs.reduce((s, a) => s + Math.round((a.trimp || 0) * magMult), 0);
+        const maxGap = hActs.reduce((m, a) => Math.max(m, a.gap || 0), 0);
+        const critDmg = hActs.length > 0 ? Math.round(maxGap * critMult) : 0;
+        const totalDamage = physDmg + magDmg + critDmg;
+
+        return {
+          name: h.name,
+          guild: h.guild,
+          avatar: h.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${h.name}`,
+          validWorkouts: hActs.length,
+          totalDamage: totalDamage,
+          totalCalories: hActs.reduce((s, a) => s + (a.calories || 0), 0),
+          totalDuration: hActs.reduce((s, a) => s + (a.duration || 0), 0),
+          maxGap: maxGap,
+          physDmg: physDmg,
+          magDmg: magDmg,
+          critDmg: critDmg
+        };
+      }).sort((a, b) => b.totalDamage - a.totalDamage);
+
+      const totalPhys = sortedHeroes.reduce((s, h) => s + h.physDmg, 0);
+      const totalMag = sortedHeroes.reduce((s, h) => s + h.magDmg, 0);
+      const totalCrit = sortedHeroes.reduce((s, h) => s + h.critDmg, 0);
+      const totalDamage = totalPhys + totalMag + totalCrit;
 
       const maxHp = bossData.maxHp || 350000;
       const finalHp = Math.max(0, maxHp - totalDamage);
 
       const summary = { totalPhys, totalMag, totalCrit, totalDamage };
 
-      const sortedHeroes = heroes.map(h => {
-        const hActs = inSeasonValidActs.filter(a => a.hero === h.name);
-        return {
-          name: h.name,
-          guild: h.guild,
-          avatar: h.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${h.name}`,
-          validWorkouts: hActs.length,
-          totalDamage: hActs.reduce((s, a) => s + (a.damage || 0), 0),
-          totalCalories: hActs.reduce((s, a) => s + (a.calories || 0), 0),
-          totalDuration: hActs.reduce((s, a) => s + (a.duration || 0), 0),
-          maxGap: hActs.reduce((m, a) => Math.max(m, a.gap || 0), 0),
-          physDmg: hActs.reduce((s, a) => s + (a.physDmg || a.calories || 0), 0),
-          magDmg: hActs.reduce((s, a) => s + (a.magDmg || 0), 0),
-          critDmg: hActs.reduce((s, a) => s + (a.critDmg || 0), 0)
-        };
-      }).sort((a, b) => b.totalDamage - a.totalDamage);
-
       const sortedGuilds = guilds.map(g => {
-        const gActs = inSeasonValidActs.filter(a => a.guild === g.name);
-        const gDmg = gActs.reduce((s, a) => s + (a.damage || 0), 0);
+        const gHeroes = sortedHeroes.filter(h => h.guild === g.name);
+        const gDmg = gHeroes.reduce((s, h) => s + (h.totalDamage || 0), 0);
         return {
           name: g.name,
           badge: g.badge || "🛡️",
