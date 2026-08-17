@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Strava 雲端爬蟲 (Supabase 雲端資料庫 100% 動態直連版 + React Microfrontend 支援)
+"""
+
 import os
 import re
 import time
@@ -5,7 +11,7 @@ import sys
 import json
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://yxkvbkfnlqwlybhmugki.supabase.co").strip().rstrip("/")
 SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY", os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4a3Zia2ZubHF3bHliaG11Z2tpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5NDIyODYsImV4cCI6MjEwMjUxODI4Nn0.Jky4o080Gn9-prx-G0aj7dCl7rmA1dJWN3BZgkVmjwo")).strip()
@@ -79,9 +85,14 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
         print("⚠️ 目前 Supabase 中無任何綁定 Strava ID 的選手，結束本次爬取。")
         return
 
+    # 確保 Cookie 包含 _strava4_session
+    clean_cookie = strava_cookie.strip()
+    if clean_cookie and not clean_cookie.startswith("_strava4_session=") and "=" not in clean_cookie:
+        clean_cookie = f"_strava4_session={clean_cookie}"
+
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Cookie": strava_cookie,
+        "Cookie": clean_cookie,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7"
     }
@@ -102,35 +113,50 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
                 continue
 
             soup = BeautifulSoup(resp.text, "html.parser")
-            activity_cards = soup.select("div.activity, div.feed-entry, div[data-testid=web-feed-entry], div.card")
-            print(f"  📡 找到 {len(activity_cards)} 筆近期卡片")
+            found_athlete_acts = []
 
-            for card in activity_cards:
-                act_link = card.select_one("a[href*='/activities/']")
-                if not act_link: continue
-                href = act_link.get("href", "")
-                m = re.search(r"/activities/(\d+)", href)
-                if not m: continue
-                act_id = str(m.group(1))
+            # 1. 解析 Strava 現代 Microfrontend React Prefetched Feed
+            for comp in soup.select("[data-react-class=Microfrontend]"):
+                props_raw = comp.get("data-react-props")
+                if not props_raw: continue
+                try:
+                    p_data = json.loads(props_raw)
+                    app_ctx = p_data.get("appContext", {})
+                    pre_entries = app_ctx.get("preFetchedEntries", [])
+                    for entry in pre_entries:
+                        act = entry.get("activity")
+                        if not act: continue
+                        act_ath_id = str(act.get("athlete", {}).get("athleteId", ""))
+                        if act_ath_id == str(ath_id) or not act_ath_id:
+                            act_id = str(act.get("id"))
+                            if act_id and act_id not in existing_ids:
+                                found_athlete_acts.append((act_id, act.get("activityName") or "鍛鍊", act))
+                except Exception:
+                    pass
 
+            # 2. 若無 React Prefetched，嘗試解析傳統 HTML 卡片
+            if not found_athlete_acts:
+                activity_cards = soup.select("div.activity, div.feed-entry, div[data-testid=web-feed-entry], div.card, article")
+                for card in activity_cards:
+                    act_link = card.select_one("a[href*='/activities/']")
+                    if act_link:
+                        m = re.search(r"/activities/(\d+)", act_link.get("href", ""))
+                        if m:
+                            act_id = str(m.group(1))
+                            if act_id not in existing_ids:
+                                name_el = card.select_one(".entry-title, .activity-name, [data-testid=activity_name]")
+                                found_athlete_acts.append((act_id, name_el.text.strip() if name_el else "鍛鍊", None))
+
+            print(f"  📡 成功解析出 {len(found_athlete_acts)} 筆新運動")
+
+            for act_id, act_name, react_act in found_athlete_acts:
                 if act_id in existing_ids:
                     continue
-
-                act_name_el = card.select_one(".entry-title, .activity-name, [data-testid=activity_name]")
-                act_name = act_name_el.text.strip() if act_name_el else "運動"
 
                 # Check Excluded Keywords
                 if any(kw in act_name for kw in exclude_keywords if kw):
                     print(f"  🚫 略過排除關鍵字活動：{act_name} (#{act_id})")
                     continue
-
-                # Fetch detailed activity page
-                detail_url = f"https://www.strava.com/activities/{act_id}"
-                detail_resp = requests.get(detail_url, headers=headers, timeout=15)
-                if detail_resp.status_code != 200:
-                    continue
-
-                d_soup = BeautifulSoup(detail_resp.text, "html.parser")
 
                 sport_type = "Workout"
                 moving_time_mins = 0
@@ -139,49 +165,85 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
                 avg_hr = 0
                 max_hr = 0
                 calories = 0
+                start_time_readable = None
 
-                # Sport type
-                type_el = d_soup.select_one(".activity-type, .inline-stats")
-                if type_el:
-                    sport_type = type_el.text.strip().split()[0]
+                # 若有 React 預載資料，優先提取
+                if react_act:
+                    sport_type = react_act.get("type", "Workout")
+                    elapsed = react_act.get("elapsedTime", 0)
+                    if elapsed: moving_time_mins = round(elapsed / 60)
+                    for st in react_act.get("stats", []):
+                        val_str = st.get("value", "")
+                        sub = st.get("key", "")
+                        if "Time" in val_str or "stat_one" in sub:
+                            m_min = re.search(r"(\d+)m", val_str)
+                            m_hr = re.search(r"(\d+)h", val_str)
+                            h = int(m_hr.group(1)) if m_hr else 0
+                            m = int(m_min.group(1)) if m_min else 0
+                            if h or m: moving_time_mins = h * 60 + m
+                        elif "bpm" in val_str:
+                            m_bpm = re.search(r"(\d+)", val_str)
+                            if m_bpm: avg_hr = int(m_bpm.group(1))
+                        elif "Cal" in val_str or "kcal" in val_str:
+                            m_cal = re.search(r"([\d,]+)", val_str)
+                            if m_cal: calories = int(m_cal.group(1).replace(",", ""))
 
-                # Stats table
-                stat_spans = d_soup.select(".inline-stats li, .stats li, [data-testid=stat]")
-                for li in stat_spans:
-                    txt = li.text.strip()
-                    if "時間" in txt or "Time" in txt:
-                        num = re.search(r"(\d+)\s*(?:小時|h|hr)?\s*(\d+)?\s*(?:分|m|min)?", txt)
-                        if num:
-                            h = int(num.group(1)) if "小時" in txt or "h" in txt else 0
-                            mins = int(num.group(2) or num.group(1)) if h > 0 else int(num.group(1))
-                            moving_time_mins = h * 60 + mins
-                    elif "距離" in txt or "Distance" in txt:
-                        num = re.search(r"([\d\.]+)\s*(?:公里|km)", txt)
-                        if num: distance_km = float(num.group(1))
-                    elif "心率" in txt or "Heart Rate" in txt or "bpm" in txt:
-                        num = re.search(r"(\d+)\s*bpm", txt)
-                        if num and not avg_hr: avg_hr = int(num.group(1))
-                    elif "卡路里" in txt or "熱量" in txt or "Calories" in txt:
-                        num = re.search(r"([\d,]+)\s*(?:卡|kcal|Calories)", txt)
-                        if num: calories = int(num.group(1).replace(",", ""))
+                    if react_act.get("startDate"):
+                        try:
+                            clean_dt = react_act.get("startDate").replace("Z", "+00:00")
+                            dt_obj = datetime.fromisoformat(clean_dt)
+                            local_dt = dt_obj + timedelta(hours=8)
+                            start_time_readable = local_dt.strftime("%Y/%m/%d %H:%M:%S")
+                        except Exception:
+                            pass
+
+                # Fetch detailed activity page if needed
+                detail_url = f"https://www.strava.com/activities/{act_id}"
+                try:
+                    detail_resp = requests.get(detail_url, headers=headers, timeout=15)
+                    if detail_resp.status_code == 200:
+                        d_soup = BeautifulSoup(detail_resp.text, "html.parser")
+                        type_el = d_soup.select_one(".activity-type, .inline-stats")
+                        if type_el and not sport_type:
+                            sport_type = type_el.text.strip().split()[0]
+
+                        stat_spans = d_soup.select(".inline-stats li, .stats li, [data-testid=stat]")
+                        for li in stat_spans:
+                            txt = li.text.strip()
+                            if ("時間" in txt or "Time" in txt) and not moving_time_mins:
+                                num = re.search(r"(\d+)\s*(?:小時|h|hr)?\s*(\d+)?\s*(?:分|m|min)?", txt)
+                                if num:
+                                    h = int(num.group(1)) if "小時" in txt or "h" in txt else 0
+                                    mins = int(num.group(2) or num.group(1)) if h > 0 else int(num.group(1))
+                                    moving_time_mins = h * 60 + mins
+                            elif "距離" in txt or "Distance" in txt:
+                                num = re.search(r"([\d\.]+)\s*(?:公里|km)", txt)
+                                if num: distance_km = float(num.group(1))
+                            elif ("心率" in txt or "Heart Rate" in txt or "bpm" in txt) and not avg_hr:
+                                num = re.search(r"(\d+)\s*bpm", txt)
+                                if num: avg_hr = int(num.group(1))
+                            elif ("卡路里" in txt or "熱量" in txt or "Calories" in txt) and not calories:
+                                num = re.search(r"([\d,]+)\s*(?:卡|kcal|Calories)", txt)
+                                if num: calories = int(num.group(1).replace(",", ""))
+
+                        time_el = d_soup.select_one("time, .timestamp, [data-testid=date_time]")
+                        if time_el and not start_time_readable:
+                            dt_attr = time_el.get("datetime", "")
+                            if dt_attr:
+                                try:
+                                    clean_dt = dt_attr.replace("Z", "+00:00")
+                                    dt_obj = datetime.fromisoformat(clean_dt)
+                                    local_dt = dt_obj + timedelta(hours=8)
+                                    start_time_readable = local_dt.strftime("%Y/%m/%d %H:%M:%S")
+                                except Exception:
+                                    pass
+                            if not start_time_readable and time_el.text.strip():
+                                start_time_readable = time_el.text.strip()
+                except Exception as e:
+                    pass
 
                 if not calories and avg_hr and moving_time_mins:
                     calories = int(calculate_calories(avg_hr, moving_time_mins) or 0)
-
-                # Extract exact activity date from <time> tag
-                time_el = d_soup.select_one("time, .timestamp, [data-testid=date_time]")
-                start_time_readable = None
-                if time_el:
-                    dt_attr = time_el.get("datetime", "")
-                    if dt_attr:
-                        try:
-                            clean_dt = dt_attr.replace("Z", "+00:00")
-                            dt_obj = datetime.fromisoformat(clean_dt)
-                            start_time_readable = dt_obj.strftime("%Y/%m/%d %H:%M:%S")
-                        except Exception:
-                            pass
-                    if not start_time_readable and time_el.text.strip():
-                        start_time_readable = time_el.text.strip()
 
                 if not start_time_readable:
                     start_time_readable = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
@@ -218,13 +280,13 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
         try:
             r = requests.post(insert_url, headers=SUPABASE_HEADERS, json=new_activities_to_insert, timeout=15)
             if r.status_code in [200, 201]:
-                print(f"🎉 成功寫入 Supabase！所有玩家打開 Web 網頁即可秒速看到最新戰報！")
+                print(f"🎉 成功寫入 {len(new_activities_to_insert)} 筆新運動至 Supabase！前台看板與世界 Boss 戰況已秒速同步！")
             else:
                 print(f"❌ 寫入 Supabase 失敗 (HTTP {r.status_code}): {r.text}")
         except Exception as e:
             print(f"❌ 寫入 Supabase 發生錯誤: {e}")
     else:
-        print("\n✅ 本次檢查無新活動需要寫入，全服數據已是最新狀態！")
+        print("\n✅ 本次檢查無新活動寫入。")
 
 if __name__ == "__main__":
     print("=== Strava 雲端爬蟲 (Supabase 雲端資料庫 100% 動態直連版) 啟動 ===")
