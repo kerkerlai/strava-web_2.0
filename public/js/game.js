@@ -1134,13 +1134,28 @@ function loadHeroViewerData() {
   const select = document.getElementById('viewer-hero-select');
   if (select) selectedViewerHero = select.value;
 
-  const hero = gameState?.heroes?.find(h => h.name === selectedViewerHero) || { name: selectedViewerHero, guild: '自由英雄', age: 35, maxHr: 185, rpgClass: '狂戰士' };
+  const hero = gameState?.heroes?.find(h => h.name === selectedViewerHero) || { name: selectedViewerHero, guild: "自由英雄", age: 35, maxHr: 185, rpgClass: "狂戰士" };
   const heroActs = (gameState?.activities || []).filter(a => a.hero === selectedViewerHero);
   const heroStat = heroStatsList?.find(h => h.name === selectedViewerHero) || {};
 
+  const seasonStartStr = localStorage.getItem("iron_heroes_season_start") || gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
+  const seasonEndStr = localStorage.getItem("iron_heroes_season_end") || gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
+  const startD = parseActivityDate(seasonStartStr);
+  const endD = parseActivityDate(seasonEndStr);
+  if (endD) endD.setHours(23, 59, 59, 999);
+
+  const inSeasonActs = heroActs.filter(a => {
+    if (a.isExcluded) return false;
+    const aDate = parseActivityDate(a.date || a.time);
+    if (aDate && startD && endD) {
+      return aDate >= startD && aDate <= endD;
+    }
+    return a.inSeason !== false;
+  });
+
   const totalDmg = heroStat.totalDamage || 0;
-  const totalDur = heroActs.reduce((acc, a) => acc + (a.duration || 0), 0);
-  const totalCal = heroActs.reduce((acc, a) => acc + (a.calories || 0), 0);
+  const totalDur = inSeasonActs.reduce((acc, a) => acc + (a.duration || 0), 0);
+  const totalCal = inSeasonActs.reduce((acc, a) => acc + (a.calories || 0), 0);
   const cls = RPG_CLASSES[hero.rpgClass || '狂戰士'] || RPG_CLASSES['狂戰士'];
 
   // HUD Header
@@ -1405,11 +1420,26 @@ function openHeroDetailModal(heroName) {
   };
   const heroStat = (heroStatsList || []).find(h => (h.name || "").trim() === cleanName) || {};
   const heroActs = (gameState?.activities || []).filter(a => (a.hero || "").trim() === cleanName);
-  const cls = RPG_CLASSES[hero.rpgClass || '狂戰士'] || RPG_CLASSES['狂戰士'];
+  const cls = RPG_CLASSES[hero.rpgClass || "狂戰士"] || RPG_CLASSES["狂戰士"];
+
+  const seasonStartStr = localStorage.getItem("iron_heroes_season_start") || gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
+  const seasonEndStr = localStorage.getItem("iron_heroes_season_end") || gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
+  const startD = parseActivityDate(seasonStartStr);
+  const endD = parseActivityDate(seasonEndStr);
+  if (endD) endD.setHours(23, 59, 59, 999);
+
+  const inSeasonActs = heroActs.filter(a => {
+    if (a.isExcluded) return false;
+    const aDate = parseActivityDate(a.date || a.time);
+    if (aDate && startD && endD) {
+      return aDate >= startD && aDate <= endD;
+    }
+    return a.inSeason !== false;
+  });
 
   const totalDmg = heroStat.totalDamage || 0;
-  const totalDur = heroActs.reduce((acc, a) => acc + (a.duration || 0), 0);
-  const totalCal = heroActs.reduce((acc, a) => acc + (a.calories || 0), 0);
+  const totalDur = inSeasonActs.reduce((acc, a) => acc + (a.duration || 0), 0);
+  const totalCal = inSeasonActs.reduce((acc, a) => acc + (a.calories || 0), 0);
 
   title.innerHTML = `
     <div class="flex items-center space-x-2">

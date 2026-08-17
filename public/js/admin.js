@@ -520,10 +520,34 @@ async function archiveCurrentSeason() {
       if (seasonRes && seasonRes.ok) seasonStats = await seasonRes.json();
     } catch (e) {}
 
+    const curStartRaw = document.getElementById("cfg-season-start")?.value;
+    const curEndRaw = document.getElementById("cfg-season-end")?.value;
+    const activeStartStr = (curStartRaw ? inputValToDate(curStartRaw) : null) || localStorage.getItem("iron_heroes_season_start") || gameState?.seasonStart || state?.seasonStart || "2026/08/12";
+    const activeEndStr = (curEndRaw ? inputValToDate(curEndRaw) : null) || localStorage.getItem("iron_heroes_season_end") || gameState?.seasonEnd || state?.seasonEnd || "2026/08/31";
+
     const bossData = state.boss || gameState?.boss || {};
+    bossData.seasonStart = activeStartStr;
+    bossData.seasonEnd = activeEndStr;
+
     const activities = state.activities || allActivitiesCache || gameState?.activities || [];
     const guilds = state.guilds || gameState?.guilds || [];
     const heroes = state.heroes || gameState?.heroes || [];
+
+    const startD = parseActivityDate(activeStartStr);
+    const endD = parseActivityDate(activeEndStr);
+    if (endD) endD.setHours(23, 59, 59, 999);
+
+    // Filter strictly within GM active season dates
+    const inSeasonValidActs = activities.filter(a => {
+      if (a.isExcluded) return false;
+      const dur = parseFloat(a.duration || 0);
+      if (dur < 30.0) return false;
+      const aDate = parseActivityDate(a.date || a.time);
+      if (aDate && startD && endD) {
+        return aDate >= startD && aDate <= endD;
+      }
+      return a.isValidAttack !== false;
+    });
 
     const now = new Date();
     const timeStampStr = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
@@ -532,7 +556,7 @@ async function archiveCurrentSeason() {
 
     // 1. CLASSIC MODE SNAPSHOT (1:1 with Classic Arena)
     if (activeMode === 'classic') {
-      const validActs = activities.filter(a => a.isValidAttack);
+      const validActs = inSeasonValidActs;
       const heroMap = {};
       heroes.forEach(h => {
         heroMap[h.name] = {
@@ -623,7 +647,7 @@ async function archiveCurrentSeason() {
         id: `snapshot_classic_${Date.now()}`,
         type: 'classic',
         seasonTitle: snapshotTitle,
-        seasonPeriod: `${bossData.seasonStart || '2026/07/27'} ~ ${bossData.seasonEnd || '2026/09/30'}`,
+        seasonPeriod: `${activeStartStr} ~ ${activeEndStr}`,
         archivedAt: timeStampStr,
         status: 'completed',
         statusLabel: '🏁 本賽季已圓滿結算 (歷史數據已凍結)',
@@ -646,7 +670,7 @@ async function archiveCurrentSeason() {
 
     // 2. RPG CLASS & TALENT SNAPSHOT (1:1 with RPG View)
     else if (activeMode === 'rpg_talent' || activeMode === 'rpg') {
-      const validActs = activities.filter(a => a.isValidAttack);
+      const validActs = inSeasonValidActs;
       const heroRpgMap = {};
       heroes.forEach(h => {
         const cKey = h.rpgClass || '狂戰士';
@@ -700,7 +724,7 @@ async function archiveCurrentSeason() {
         id: `snapshot_rpg_${Date.now()}`,
         type: 'rpg',
         seasonTitle: snapshotTitle,
-        seasonPeriod: `${bossData.seasonStart || '2026/07/27'} ~ ${bossData.seasonEnd || '2026/09/30'}`,
+        seasonPeriod: `${activeStartStr} ~ ${activeEndStr}`,
         archivedAt: timeStampStr,
         status: 'completed',
         statusLabel: '🏁 本賽季職業爭霸已圓滿結算封存',
@@ -713,16 +737,50 @@ async function archiveCurrentSeason() {
 
     // 3. WORLD BOSS SNAPSHOT (1:1 with World Boss View)
     else {
-      const summary = seasonStats?.summary || { totalDamage: 0, totalPhys: 0, totalMag: 0, totalCrit: 0 };
-      const finalHp = seasonStats?.boss?.currentHp !== undefined ? seasonStats.boss.currentHp : Math.max(0, (bossData.maxHp || 350000) - summary.totalDamage);
-      const sortedHeroes = seasonStats?.heroStats || heroStats;
-      const sortedGuilds = seasonStats?.guildContributions || [];
+      const totalPhys = inSeasonValidActs.reduce((s, a) => s + (a.physDmg || a.calories || 0), 0);
+      const totalMag = inSeasonValidActs.reduce((s, a) => s + (a.magDmg || 0), 0);
+      const totalCrit = inSeasonValidActs.reduce((s, a) => s + (a.critDmg || 0), 0);
+      const totalDamage = inSeasonValidActs.reduce((s, a) => s + (a.damage || 0), 0);
+
+      const maxHp = bossData.maxHp || 350000;
+      const finalHp = Math.max(0, maxHp - totalDamage);
+
+      const summary = { totalPhys, totalMag, totalCrit, totalDamage };
+
+      const sortedHeroes = heroes.map(h => {
+        const hActs = inSeasonValidActs.filter(a => a.hero === h.name);
+        return {
+          name: h.name,
+          guild: h.guild,
+          avatar: h.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${h.name}`,
+          validWorkouts: hActs.length,
+          totalDamage: hActs.reduce((s, a) => s + (a.damage || 0), 0),
+          totalCalories: hActs.reduce((s, a) => s + (a.calories || 0), 0),
+          totalDuration: hActs.reduce((s, a) => s + (a.duration || 0), 0),
+          maxGap: hActs.reduce((m, a) => Math.max(m, a.gap || 0), 0),
+          physDmg: hActs.reduce((s, a) => s + (a.physDmg || a.calories || 0), 0),
+          magDmg: hActs.reduce((s, a) => s + (a.magDmg || 0), 0),
+          critDmg: hActs.reduce((s, a) => s + (a.critDmg || 0), 0)
+        };
+      }).sort((a, b) => b.totalDamage - a.totalDamage);
+
+      const sortedGuilds = guilds.map(g => {
+        const gActs = inSeasonValidActs.filter(a => a.guild === g.name);
+        const gDmg = gActs.reduce((s, a) => s + (a.damage || 0), 0);
+        return {
+          name: g.name,
+          badge: g.badge || "🛡️",
+          color: g.color || "#3b82f6",
+          totalDamage: gDmg,
+          pct: totalDamage > 0 ? Math.round((gDmg / totalDamage) * 1000) / 10 : 0
+        };
+      }).sort((a, b) => b.totalDamage - a.totalDamage);
 
       newArchive = {
         id: `snapshot_boss_${Date.now()}`,
         type: 'world_boss',
         seasonTitle: snapshotTitle,
-        seasonPeriod: `${bossData.seasonStart || '2026/08/12'} ~ ${bossData.seasonEnd || '2026/08/31'}`,
+        seasonPeriod: `${activeStartStr} ~ ${activeEndStr}`,
         archivedAt: timeStampStr,
         status: "completed",
         statusLabel: "🏁 本賽季討伐戰已圓滿結算封存",
