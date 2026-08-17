@@ -257,18 +257,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function fetchGameData() {
   try {
-    const [stateRes, heroRes] = await Promise.all([
-      fetch('/api/state'),
-      fetch('/api/hero_stats')
-    ]);
-    gameState = await stateRes.json();
-    heroStatsList = await heroRes.json();
+    const res = await fetch('/api/state');
+    if (res.ok) {
+      gameState = await res.json();
+    }
+  } catch (e) {}
 
-    const effectiveMode = gameState?.activeMode || 'classic';
-    setupImmersiveNavigation(effectiveMode);
-  } catch (e) {
-    console.error('Fetch game data error:', e);
+  if (!gameState) {
+    try {
+      const fb = await fetch('/data/game_data.json');
+      if (fb.ok) gameState = await fb.json();
+    } catch(e) {}
   }
+
+  const storedMode = localStorage.getItem('iron_heroes_active_mode');
+  const effectiveMode = storedMode || gameState?.activeMode || 'world_boss';
+  if (gameState) gameState.activeMode = effectiveMode;
+  setupImmersiveNavigation(effectiveMode);
 }
 
 /**

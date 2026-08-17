@@ -331,20 +331,26 @@ async function saveGlobalGameSettings() {
     }
   };
 
+  gameState.activeMode = activeMode;
+  gameState.seasonStart = seasonStart;
+  gameState.seasonEnd = seasonEnd;
+  if (!gameState.boss) gameState.boss = {};
+  gameState.boss.seasonStart = seasonStart;
+  gameState.boss.seasonEnd = seasonEnd;
+
+  localStorage.setItem('iron_heroes_active_mode', activeMode);
+  localStorage.setItem('game_state', JSON.stringify(gameState));
+
   try {
-    const res = await fetch('/api/settings/update', {
+    await fetch('/api/settings/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    if (res.ok) {
-      alert(`✅ 資料片模式已切換為【${getModeLabel(activeMode)}】！前台看板已即時同步切換！`);
-      await fetchAdminData();
-      onExpansionModeChanged();
-    }
-  } catch (e) {
-    alert(`✅ 已儲存至本地快取並即時生效！`);
-  }
+  } catch (e) {}
+
+  alert(`✅ 資料片模式已切換為【${getModeLabel(activeMode)}】！前台看板與設定已即時生效！`);
+  onExpansionModeChanged();
 }
 
 // -------------------------------------------------------------
@@ -352,12 +358,13 @@ async function saveGlobalGameSettings() {
 // -------------------------------------------------------------
 
 function getSnapshotsList() {
-  let list = gameState?.snapshots || gameState?.archivedSeasons || [];
-  if (list.length === 0) {
-    const local = localStorage.getItem('custom_archived_seasons');
-    if (local) {
-      try { list = JSON.parse(local); } catch(e){}
-    }
+  let list = [];
+  const local = localStorage.getItem('custom_archived_seasons');
+  if (local) {
+    try { list = JSON.parse(local); } catch(e){}
+  }
+  if (!list || list.length === 0) {
+    list = gameState?.snapshots || gameState?.archivedSeasons || [];
   }
   return list;
 }
@@ -1112,7 +1119,18 @@ async function saveBossSettings() {
 function renderActivityTable() {
   const tbody = document.getElementById('admin-activities-table-body');
   const heroFilter = document.getElementById('admin-act-hero-filter');
-  if (!tbody || !allActivitiesCache) return;
+  if (!tbody) return;
+
+  // Merge local manual activities into allActivitiesCache
+  try {
+    const localSaved = JSON.parse(localStorage.getItem('manual_activities') || '[]');
+    if (!allActivitiesCache) allActivitiesCache = [];
+    localSaved.forEach(la => {
+      if (!allActivitiesCache.some(a => String(a.id) === String(la.id))) {
+        allActivitiesCache.unshift(la);
+      }
+    });
+  } catch(e) {}
 
   if (heroFilter && gameState?.heroes) {
     const currHero = heroFilter.value;
