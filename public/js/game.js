@@ -1958,7 +1958,7 @@ function renderChroniclesView() {
     const activities = snap.activities || [];
 
     const maxHp = boss.maxHp || snap.bossMaxHp || 350000;
-    const currHp = boss.currentHp !== undefined ? boss.currentHp : (snap.bossFinalHp !== undefined ? snap.bossFinalHp : Math.max(0, maxHp - summary.totalDamage));
+    const currHp = Math.max(0, maxHp - (summary.totalDamage || 0));
     const hpPct = Math.max(0, Math.min(100, (currHp / maxHp) * 100));
 
     container.innerHTML = `
