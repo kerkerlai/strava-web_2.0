@@ -112,8 +112,33 @@ def setup_google_sheet(creds_json, sheet_url, worksheet_name, config_obj=None):
         ]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(creds)
-        print(f"✅ 成功連線至 Google Sheets：{sheet_url}")
-        return client.open_by_url(sheet_url).worksheet(worksheet_name)
+        spreadsheet = client.open_by_url(sheet_url)
+        print(f"✅ 成功連線至 Google Sheets：{spreadsheet.title}")
+
+        # Auto-discover Strava IDs from 參賽者名單 tab
+        if config_obj and isinstance(config_obj, dict) and "athleteProfiles" in config_obj:
+            try:
+                p_ws = spreadsheet.worksheet("參賽者名單")
+                p_rows = p_ws.get_all_values()
+                sheet_added = 0
+                for row in p_rows[1:]:
+                    if len(row) >= 2 and row[0].strip():
+                        name = row[0].strip()
+                        # Search for Strava ID in all columns of the row
+                        for cell in row[1:]:
+                            cell_str = str(cell).strip()
+                            if re.match(r"^\d{6,12}$", cell_str):
+                                if cell_str not in config_obj["athleteProfiles"]:
+                                    config_obj["athleteProfiles"][cell_str] = name
+                                    sheet_added += 1
+                                    print(f"📋 [Google Sheet 名冊同步] 自動發現新選手：{name} (Strava ID: #{cell_str})")
+                                break
+                if sheet_added > 0:
+                    print(f"🎉 從 Google Sheet 參賽者名單成功載入 {sheet_added} 位新選手！目前總共監控 {len(config_obj['athleteProfiles'])} 位選手。")
+            except Exception as pe:
+                print(f"ℹ️ 掃描「參賽者名單」Strava ID: {pe}")
+
+        return spreadsheet.worksheet(worksheet_name)
     except Exception as e:
         print(f"❌ Google Sheets 連線失敗：{e}")
         return None

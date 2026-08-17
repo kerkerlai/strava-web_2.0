@@ -444,11 +444,15 @@
           </div>
         </div>
         <div class="flex items-center space-x-2">
-          <button onclick="runCrawlerNow()" class="px-3.5 py-1.5 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center space-x-1.5">
-            <i data-lucide="play" class="w-4 h-4"></i>
-            <span>⚡ 立即執行爬蟲測試</span>
+          <button onclick="downloadCrawlerConfigJSON()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold rounded-xl text-xs transition shadow-md flex items-center space-x-1.5" title="下載最新 crawler_config.json 設定檔">
+            <i data-lucide="download" class="w-4 h-4 text-emerald-400"></i>
+            <span>📥 下載 JSON</span>
           </button>
-          <button onclick="saveCrawlerConfig()" class="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center space-x-1.5">
+          <button onclick="runCrawlerNow()" class="px-3 py-1.5 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center space-x-1.5">
+            <i data-lucide="play" class="w-4 h-4"></i>
+            <span>⚡ 執行爬蟲測試</span>
+          </button>
+          <button onclick="saveCrawlerConfig()" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center space-x-1.5">
             <i data-lucide="save" class="w-4 h-4"></i>
             <span>💾 儲存爬蟲設定</span>
           </button>
@@ -479,14 +483,18 @@
                 </select>
               </div>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
               <div>
-                <label class="text-[10px] font-bold text-slate-300 block mb-1">✍️ 或手動自訂新英雄姓名 (若選單無此人)</label>
-                <input type="text" id="crawler-new-ath-custom-name" placeholder="輸入新英雄名字 (如 David 或 wOWOW)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-cyan-500">
+                <label class="text-[10px] font-bold text-slate-300 block mb-1">✍️ 或手動自訂新英雄姓名</label>
+                <input type="text" id="crawler-new-ath-custom-name" placeholder="如 David 或 wOWOW" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-cyan-500">
               </div>
               <div>
-                <label class="text-[10px] font-bold text-slate-300 block mb-1">🛡️ 所屬公會 (自訂姓名時填寫)</label>
-                <input type="text" id="crawler-new-ath-custom-guild" placeholder="輸入公會名稱 (如 Cake 或 自由英雄)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-cyan-500">
+                <label class="text-[10px] font-bold text-slate-300 block mb-1">🛡️ 所屬公會</label>
+                <input type="text" id="crawler-new-ath-custom-guild" placeholder="如 Cake 或 試試看" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-cyan-500">
+              </div>
+              <div>
+                <label class="text-[10px] font-bold text-slate-300 block mb-1">🎂 年齡 (推算極限心率)</label>
+                <input type="number" id="crawler-new-ath-age" placeholder="35" value="35" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs font-mono outline-none focus:border-cyan-500">
               </div>
             </div>
             <div class="flex justify-end pt-1">
@@ -504,6 +512,8 @@
                 <tr>
                   <th class="p-2.5">🔗 Strava ID</th>
                   <th class="p-2.5">👤 英雄姓名</th>
+                  <th class="p-2.5">🛡️ 所屬公會</th>
+                  <th class="p-2.5">💓 年齡 / 極限心率</th>
                   <th class="p-2.5 text-right">⚙️ 操作</th>
                 </tr>
               </thead>

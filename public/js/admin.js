@@ -1537,6 +1537,7 @@ function renderCrawlerUI() {
       entries.forEach(([athId, heroName]) => {
         const tr = document.createElement("tr");
         tr.className = "hover:bg-slate-900/40 transition";
+        const heroInfo = (gameState?.heroes || []).find(h => (h.name || "").trim() === heroName.trim()) || { guild: "自由英雄", age: 35, maxHr: 185 };
         tr.innerHTML = `
           <td class="p-2.5 font-mono text-cyan-400 font-bold">
             <a href="https://www.strava.com/athletes/${athId}" target="_blank" class="hover:underline flex items-center space-x-1">
@@ -1545,6 +1546,10 @@ function renderCrawlerUI() {
             </a>
           </td>
           <td class="p-2.5 font-bold text-white">${heroName}</td>
+          <td class="p-2.5">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-amber-300 border border-slate-700">${heroInfo.guild || "自由英雄"}</span>
+          </td>
+          <td class="p-2.5 text-slate-400 font-mono text-[11px]">${heroInfo.age || 35}歲 <span class="text-rose-400 font-bold">(${heroInfo.maxHr || (220 - (heroInfo.age || 35))} bpm)</span></td>
           <td class="p-2.5 text-right">
             <button onclick="deleteCrawlerAthlete('${athId}')" class="p-1 rounded text-rose-400 hover:bg-rose-950/40 transition" title="刪除">
               <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
@@ -1602,10 +1607,13 @@ function addCrawlerAthlete() {
   const heroSelect = document.getElementById("crawler-new-ath-hero");
   const customNameInput = document.getElementById("crawler-new-ath-custom-name");
   const customGuildInput = document.getElementById("crawler-new-ath-custom-guild");
+  const ageInput = document.getElementById("crawler-new-ath-age");
 
   const athId = (idInput?.value || "").trim();
   const customName = (customNameInput?.value || "").trim();
   const customGuild = (customGuildInput?.value || "").trim() || "自由英雄";
+  const age = parseInt(ageInput?.value || "35", 10) || 35;
+  const maxHr = 220 - age;
   const selectedName = (heroSelect?.value || "").trim();
 
   const heroName = customName || selectedName;
@@ -1625,17 +1633,20 @@ function addCrawlerAthlete() {
   if (!existingHero) {
     existingHero = {
       name: heroName,
-      age: 35,
-      maxHr: 185,
+      age: age,
+      maxHr: maxHr,
       guild: customGuild,
       rpgClass: "狂戰士",
       avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${heroName}&backgroundColor=0f172a`
     };
     gameState.heroes.push(existingHero);
-    localStorage.setItem("game_state", JSON.stringify(gameState));
-    populateFormDropdowns();
-    renderHeroTable();
+  } else if (customName) {
+    existingHero.age = age;
+    existingHero.maxHr = maxHr;
+    existingHero.guild = customGuild;
   }
+
+  localStorage.setItem("game_state", JSON.stringify(gameState));
 
   if (!crawlerConfig.athleteProfiles) crawlerConfig.athleteProfiles = {};
   crawlerConfig.athleteProfiles[athId] = heroName;
@@ -1644,9 +1655,11 @@ function addCrawlerAthlete() {
   if (customNameInput) customNameInput.value = "";
   if (customGuildInput) customGuildInput.value = "";
 
-  renderCrawlerUI();
   populateFormDropdowns();
-  alert(`🎉 成功綁定選手：${heroName} (公會: ${existingHero.guild}) ➔ Strava ID: #${athId}！\n請記得點擊右上角【💾 儲存爬蟲設定】以同步生效！`);
+  renderHeroTable();
+  renderCrawlerUI();
+
+  alert(`🎉 成功綁定選手：${heroName} (公會: ${existingHero.guild} • 年齡: ${existingHero.age}歲/極限心率: ${existingHero.maxHr}bpm) ➔ Strava ID: #${athId}！\n請記得點擊右上角【💾 儲存爬蟲設定】以同步生效！`);
   showAdminToast(`已加入選手：${heroName} (#${athId})`);
 }
 
@@ -1749,4 +1762,16 @@ async function runCrawlerNow() {
 function closeCrawlerLogModal() {
   const modal = document.getElementById("modal-crawler-log");
   if (modal) modal.classList.add("hidden");
+}
+
+
+function downloadCrawlerConfigJSON() {
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(crawlerConfig, null, 2));
+  const downloadAnchor = document.createElement("a");
+  downloadAnchor.setAttribute("href", dataStr);
+  downloadAnchor.setAttribute("download", "crawler_config.json");
+  document.body.appendChild(downloadAnchor);
+  downloadAnchor.click();
+  downloadAnchor.remove();
+  showAdminToast("✅ 已下載最新的 crawler_config.json！");
 }
