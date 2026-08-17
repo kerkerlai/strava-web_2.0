@@ -521,144 +521,18 @@ async function archiveCurrentSeason() {
   const snapshotTitle = customTitle.trim() || defaultTitle;
 
   try {
-    let state = gameState || {};
-    let heroStats = [];
-    let seasonStats = null;
-
-    try {
-      const [stateRes, heroRes, seasonRes] = await Promise.all([
-        fetch('/api/state').catch(() => null),
-        fetch('/api/hero_stats').catch(() => null),
-        fetch('/api/season_stats').catch(() => null)
-      ]);
-      if (stateRes && stateRes.ok) state = await stateRes.json();
-      if (heroRes && heroRes.ok) heroStats = await heroRes.json();
-      if (seasonRes && seasonRes.ok) seasonStats = await seasonRes.json();
-    } catch (e) {}
-
     const curStartRaw = document.getElementById("cfg-season-start")?.value;
     const curEndRaw = document.getElementById("cfg-season-end")?.value;
-    const activeStartStr = (curStartRaw ? inputValToDate(curStartRaw) : null) || gameState?.seasonStart || "2026/08/12";
-    const activeEndStr = (curEndRaw ? inputValToDate(curEndRaw) : null) || gameState?.seasonEnd || "2026/08/31";
-
-    const bossData = state.boss || gameState?.boss || {};
-    bossData.seasonStart = activeStartStr;
-    bossData.seasonEnd = activeEndStr;
-
-    const activities = state.activities || allActivitiesCache || gameState?.activities || [];
-    const guilds = state.guilds || gameState?.guilds || [];
-    const heroes = state.heroes || gameState?.heroes || [];
-
-    const startD = parseActivityDate(activeStartStr);
-    const endD = parseActivityDate(activeEndStr);
-    if (endD) endD.setHours(23, 59, 59, 999);
-
-    // Filter strictly within GM active season dates
-    const inSeasonValidActs = activities.filter(a => {
-      if (a.isExcluded) return false;
-      const dur = parseFloat(a.duration || 0);
-      if (dur < 30.0) return false;
-      const aDate = parseActivityDate(a.date || a.time);
-      if (aDate && startD && endD) {
-        return aDate >= startD && aDate <= endD;
-      }
-      return a.isValidAttack !== false;
-    });
+    const activeStartStr = (curStartRaw ? inputValToDate(curStartRaw) : null) || gameState?.seasonStart || "2026/07/27";
+    const activeEndStr = (curEndRaw ? inputValToDate(curEndRaw) : null) || gameState?.seasonEnd || "2026/09/30";
 
     const now = new Date();
     const timeStampStr = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
 
     let newArchive = null;
 
-    // 1. CLASSIC MODE SNAPSHOT (1:1 with Classic Arena)
+    // 1. CLASSIC MODE SNAPSHOT (直接克隆當前已運算好的經典競技完整狀態)
     if (activeMode === 'classic') {
-      const validActs = inSeasonValidActs;
-      const heroMap = {};
-      heroes.forEach(h => {
-        heroMap[h.name] = {
-          name: h.name, guild: h.guild, avatar: h.avatar, maxHr: h.maxHr || 185,
-          workouts: 0, duration: 0, calories: 0, trimp: 0, zone2: 0, gapSum: 0, maxGap: 0, suffer: 0, density: 0
-        };
-      });
-      validActs.forEach(a => {
-        const h = heroMap[a.hero];
-        if (h) {
-          h.workouts++;
-          h.duration += (a.duration || 0);
-          h.calories += (a.calories || 0);
-          h.trimp += (a.trimp || 0);
-          if (a.isZone2) h.zone2++;
-          h.gapSum += (a.gap || 0);
-          h.maxGap = Math.max(h.maxGap, a.gap || 0);
-          h.suffer += (a.suffer || 0);
-        }
-      });
-      Object.values(heroMap).forEach(h => { h.density = h.duration > 0 ? (h.suffer / h.duration) : 0; });
-
-      const guildMap = {};
-      guilds.forEach(g => {
-        const mCount = Math.max(1, (g.members || []).length);
-        guildMap[g.name] = {
-          name: g.name, badge: g.badge || '🛡️', color: g.color || '#3b82f6', memberCount: mCount, members: g.members || [],
-          totalWorkouts: 0, totalDuration: 0, totalCalories: 0, totalTrimp: 0, totalZone2: 0, totalGap: 0, totalSuffer: 0,
-          perWorkouts: 0, perDuration: 0, perCalories: 0, perTrimp: 0, perZone2: 0, perGap: 0, perSuffer: 0, perDensity: 0
-        };
-      });
-      Object.values(heroMap).forEach(h => {
-        const g = guildMap[h.guild];
-        if (g) {
-          g.totalWorkouts += h.workouts; g.totalDuration += h.duration; g.totalCalories += h.calories;
-          g.totalTrimp += h.trimp; g.totalZone2 += h.zone2; g.totalGap += h.gapSum; g.totalSuffer += h.suffer;
-        }
-      });
-      Object.values(guildMap).forEach(g => {
-        g.perWorkouts = Math.round((g.totalWorkouts / g.memberCount) * 10) / 10;
-        g.perDuration = Math.round((g.totalDuration / g.memberCount) * 10) / 10;
-        g.perCalories = Math.round(g.totalCalories / g.memberCount);
-        g.perTrimp = Math.round((g.totalTrimp / g.memberCount) * 10) / 10;
-        g.perZone2 = Math.round((g.totalZone2 / g.memberCount) * 10) / 10;
-        g.perGap = Math.round((g.totalGap / g.memberCount) * 10) / 10;
-        g.perSuffer = Math.round((g.totalSuffer / g.memberCount) * 10) / 10;
-        g.perDensity = g.totalDuration > 0 ? Math.round((g.totalSuffer / g.totalDuration) * 100) / 100 : 0;
-      });
-
-      const gList = Object.values(guildMap);
-      const hList = Object.values(heroMap);
-      const maxGTrimp = Math.max(1, ...gList.map(g => g.perTrimp));
-      const maxGCal = Math.max(1, ...gList.map(g => g.perCalories));
-      const maxGZone2 = Math.max(1, ...gList.map(g => g.perZone2));
-      const maxGGap = Math.max(1, ...gList.map(g => g.perGap));
-      const maxGDens = Math.max(0.1, ...gList.map(g => g.perDensity));
-      const maxGWk = Math.max(1, ...gList.map(g => g.perWorkouts));
-
-      const maxHTrimp = Math.max(1, ...hList.map(h => h.trimp));
-      const maxHCal = Math.max(1, ...hList.map(h => h.calories));
-      const maxHZone2 = Math.max(1, ...hList.map(h => h.zone2));
-      const maxHGap = Math.max(1, ...hList.map(h => h.gapSum));
-      const maxHDens = Math.max(0.1, ...hList.map(h => h.density));
-      const maxHWk = Math.max(1, ...hList.map(h => h.workouts));
-
-      const teamAerobic = gList.map(g => ({
-        name: g.name, score: Math.round(((g.perTrimp / maxGTrimp) * 40 + (g.perCalories / maxGCal) * 30 + (g.perZone2 / maxGZone2) * 30) * 100) / 100
-      })).sort((a, b) => b.score - a.score).map((t, idx) => ({ ...t, rank: idx + 1, badge: idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : '')) }));
-
-      const heroAerobic = hList.map(h => ({
-        name: h.name, guild: h.guild, score: Math.round(((h.trimp / maxHTrimp) * 40 + (h.calories / maxHCal) * 30 + (h.zone2 / maxHZone2) * 30) * 100) / 100
-      })).sort((a, b) => b.score - a.score).map((h, idx) => ({ ...h, rank: idx + 1, badge: idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : '')) }));
-
-      const teamAnaerobic = gList.map(g => ({
-        name: g.name, score: Math.round(((g.perGap / maxGGap) * 50 + (g.perDensity / maxGDens) * 30 + (g.perWorkouts / maxGWk) * 20) * 100) / 100
-      })).sort((a, b) => b.score - a.score).map((t, idx) => ({ ...t, rank: idx + 1, badge: idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : '')) }));
-
-      const heroAnaerobic = hList.map(h => ({
-        name: h.name, guild: h.guild, score: Math.round(((h.gapSum / maxHGap) * 40 + (h.density / maxHDens) * 30 + (h.maxHr / 220) * 15 + (h.workouts / maxHWk) * 15) * 100) / 100
-      })).sort((a, b) => b.score - a.score).map((h, idx) => ({ ...h, rank: idx + 1, badge: idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : '')) }));
-
-      const buildLb = (getter, unit) => [...gList].sort((a, b) => getter(b) - getter(a)).map((g, idx) => ({
-        rank: idx === 0 ? '🥇 1' : (idx === 1 ? '🥈 2' : (idx === 2 ? '🥉 3' : `#${idx+1}`)),
-        team: g.name, value: getter(g).toLocaleString()
-      }));
-
       newArchive = {
         id: `snapshot_classic_${Date.now()}`,
         type: 'classic',
@@ -668,74 +542,16 @@ async function archiveCurrentSeason() {
         status: 'completed',
         statusLabel: '🏁 本賽季已圓滿結算 (歷史數據已凍結)',
         isVisible: true,
-        champions: { teamAerobic, heroAerobic, teamAnaerobic, heroAnaerobic },
-        teamMetrics: [
-          { metric: "🏋️ 鋼鐵紀律 (人均出勤)", unit: "次", leaderboard: buildLb(g => g.perWorkouts) },
-          { metric: "⏱️ 精神時光屋 (人均時長)", unit: "分鐘", leaderboard: buildLb(g => g.perDuration) },
-          { metric: "🔋 燃脂發電機 (人均熱量)", unit: "kcal", leaderboard: buildLb(g => g.perCalories) },
-          { metric: "🚀 引擎過載 (人均衝力 TRIMP)", unit: "TRIMP", leaderboard: buildLb(g => g.perTrimp) },
-          { metric: "🟢 有氧大師 (人均有氧次數)", unit: "次", leaderboard: buildLb(g => g.perZone2) },
-          { metric: "🦍 絕對力量 (人均落差 Gap)", unit: "bpm", leaderboard: buildLb(g => g.perGap) },
-          { metric: "💥 效率之王 (人均密度)", unit: "分", leaderboard: buildLb(g => g.perDensity) },
-          { metric: "🥵 燃燒殆盡 (人均痛苦 Suffer)", unit: "分", leaderboard: buildLb(g => g.perSuffer) }
-        ],
-        guildList: gList,
-        heroList: hList
+        classicData: JSON.parse(JSON.stringify(gameState?.classic || {})),
+        champions: JSON.parse(JSON.stringify(gameState?.classic?.champions || {})),
+        teamMetrics: JSON.parse(JSON.stringify(gameState?.classic?.teamMetrics || [])),
+        guildList: JSON.parse(JSON.stringify(gameState?.classic?.guildList || [])),
+        heroList: JSON.parse(JSON.stringify(gameState?.classic?.heroList || []))
       };
     }
 
-    // 2. RPG CLASS & TALENT SNAPSHOT (1:1 with RPG View)
+    // 2. RPG CLASS & TALENT SNAPSHOT (直接克隆當前已運算好的 RPG 完整狀態)
     else if (activeMode === 'rpg_talent' || activeMode === 'rpg') {
-      const validActs = inSeasonValidActs;
-      const heroRpgMap = {};
-      heroes.forEach(h => {
-        const cKey = h.rpgClass || '狂戰士';
-        const meta = RPG_CLASSES[cKey] || RPG_CLASSES['狂戰士'];
-        heroRpgMap[h.name] = {
-          name: h.name, guild: h.guild, avatar: h.avatar, rpgClass: cKey, classMeta: meta,
-          workouts: 0, duration: 0, calories: 0, trimp: 0, zone2: 0, gapSum: 0, maxGap: 0, suffer: 0, combatPower: 0
-        };
-      });
-
-      validActs.forEach(a => {
-        const h = heroRpgMap[a.hero];
-        if (h) {
-          h.workouts++; h.duration += (a.duration || 0); h.calories += (a.calories || 0);
-          h.trimp += (a.trimp || 0); if (a.isZone2) h.zone2++; h.gapSum += (a.gap || 0);
-          h.maxGap = Math.max(h.maxGap, a.gap || 0); h.suffer += (a.suffer || 0);
-        }
-      });
-
-      Object.values(heroRpgMap).forEach(h => {
-        const density = h.duration > 0 ? (h.suffer / h.duration) : 0;
-        if (h.rpgClass === '狂戰士') h.combatPower = Math.round((h.maxGap * 50) + (h.gapSum * 8) + (h.calories * 0.6));
-        else if (h.rpgClass === '聖騎士') h.combatPower = Math.round((h.workouts * 150) + (h.suffer * 1.5) + (h.duration * 1.0));
-        else if (h.rpgClass === '遊俠') h.combatPower = Math.round((h.zone2 * 120) + (h.calories * 1.2) + (h.duration * 1.5));
-        else if (h.rpgClass === '大法師') h.combatPower = Math.round((h.trimp * 25) + (h.duration * 2.0));
-        else if (h.rpgClass === '刺客') h.combatPower = Math.round((density * 1200) + (h.maxGap * 40) + (h.calories * 0.8));
-        else h.combatPower = Math.round((h.calories * 1.0) + (h.trimp * 15));
-      });
-
-      const classMasters = {};
-      Object.keys(RPG_CLASSES).forEach(cName => {
-        const cand = Object.values(heroRpgMap).filter(h => h.rpgClass === cName).sort((a, b) => b.combatPower - a.combatPower);
-        classMasters[cName] = cand[0] || null;
-      });
-
-      const guildSynergyList = guilds.map(g => {
-        const mHeroes = (g.members || []).map(m => heroRpgMap[m]).filter(Boolean);
-        const rawPower = mHeroes.reduce((s, h) => s + (h.combatPower || 0), 0);
-        const uClasses = new Set(mHeroes.map(h => h.rpgClass));
-        let bPct = 0, sTag = '基礎小隊';
-        if (uClasses.size >= 4) { bPct = 15; sTag = '🌟 全能四職業羈絆 (+15%)'; }
-        else if (uClasses.size === 3) { bPct = 10; sTag = '⚡ 三重戰術羈絆 (+10%)'; }
-        else if (uClasses.size === 2) { bPct = 5; sTag = '🛡️ 雙重協同羈絆 (+5%)'; }
-        return {
-          guild: g.name, badge: g.badge || '🛡️', color: g.color || '#f59e0b', members: g.members || [],
-          uniqueClasses: Array.from(uClasses), bonusPct: bPct, synergyTag: sTag, rawPower: rawPower, totalPower: Math.round(rawPower * (1 + bPct / 100))
-        };
-      }).sort((a, b) => b.totalPower - a.totalPower);
-
       newArchive = {
         id: `snapshot_rpg_${Date.now()}`,
         type: 'rpg',
@@ -745,62 +561,18 @@ async function archiveCurrentSeason() {
         status: 'completed',
         statusLabel: '🏁 本賽季職業爭霸已圓滿結算封存',
         isVisible: true,
-        classMasters: classMasters,
-        guildSynergyList: guildSynergyList,
-        heroRpgList: Object.values(heroRpgMap).sort((a, b) => b.combatPower - a.combatPower)
+        classMasters: JSON.parse(JSON.stringify(gameState?.rpg?.classMasters || {})),
+        guildSynergyList: JSON.parse(JSON.stringify(gameState?.rpg?.guildSynergyList || [])),
+        heroRpgList: JSON.parse(JSON.stringify(gameState?.rpg?.heroRpgList || []))
       };
     }
 
-    // 3. WORLD BOSS SNAPSHOT (1:1 with Live World Boss View)
+    // 3. WORLD BOSS SNAPSHOT (100% 絕對零誤差：直接克隆當前 live gameState 中的全部實時輸出與排行榜)
     else {
-      const physMult = bossData?.rules?.physMultiplier || 1.0;
-      const magMult = bossData?.rules?.magicMultiplier || 15.0;
-      const critMult = bossData?.rules?.critMultiplier || 100.0;
-
-      const sortedHeroes = heroes.map(h => {
-        const hActs = inSeasonValidActs.filter(a => a.hero === h.name);
-        const physDmg = hActs.reduce((s, a) => s + Math.round((a.calories || 0) * physMult), 0);
-        const magDmg = hActs.reduce((s, a) => s + Math.round((a.trimp || 0) * magMult), 0);
-        const maxGap = hActs.reduce((m, a) => Math.max(m, a.gap || 0), 0);
-        const critDmg = hActs.length > 0 ? Math.round(maxGap * critMult) : 0;
-        const totalDamage = physDmg + magDmg + critDmg;
-
-        return {
-          name: h.name,
-          guild: h.guild,
-          avatar: h.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${h.name}`,
-          validWorkouts: hActs.length,
-          totalDamage: totalDamage,
-          totalCalories: hActs.reduce((s, a) => s + (a.calories || 0), 0),
-          totalDuration: hActs.reduce((s, a) => s + (a.duration || 0), 0),
-          maxGap: maxGap,
-          physDmg: physDmg,
-          magDmg: magDmg,
-          critDmg: critDmg
-        };
-      }).sort((a, b) => b.totalDamage - a.totalDamage);
-
-      const totalPhys = sortedHeroes.reduce((s, h) => s + h.physDmg, 0);
-      const totalMag = sortedHeroes.reduce((s, h) => s + h.magDmg, 0);
-      const totalCrit = sortedHeroes.reduce((s, h) => s + h.critDmg, 0);
-      const totalDamage = totalPhys + totalMag + totalCrit;
-
-      const maxHp = bossData.maxHp || 350000;
-      const finalHp = Math.max(0, maxHp - totalDamage);
-
-      const summary = { totalPhys, totalMag, totalCrit, totalDamage };
-
-      const sortedGuilds = guilds.map(g => {
-        const gHeroes = sortedHeroes.filter(h => h.guild === g.name);
-        const gDmg = gHeroes.reduce((s, h) => s + (h.totalDamage || 0), 0);
-        return {
-          name: g.name,
-          badge: g.badge || "🛡️",
-          color: g.color || "#3b82f6",
-          totalDamage: gDmg,
-          pct: totalDamage > 0 ? Math.round((gDmg / totalDamage) * 1000) / 10 : 0
-        };
-      }).sort((a, b) => b.totalDamage - a.totalDamage);
+      const currentHeroStats = JSON.parse(JSON.stringify(gameState?.heroStats || window.heroStatsList || []));
+      const currentGuilds = JSON.parse(JSON.stringify(gameState?.guilds || []));
+      const currentSummary = JSON.parse(JSON.stringify(gameState?.summary || {}));
+      const currentBoss = JSON.parse(JSON.stringify(gameState?.boss || {}));
 
       newArchive = {
         id: `snapshot_boss_${Date.now()}`,
@@ -812,18 +584,15 @@ async function archiveCurrentSeason() {
         statusLabel: "🏁 本賽季討伐戰已圓滿結算封存",
         isVisible: true,
         boss: {
-          name: bossData.name || '🌩️ 墮落雷神・索爾 (Fallen Thor)',
-          avatar: bossData.avatar || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80',
-          description: bossData.description || '索爾受到雷霆魔劍侵蝕陷入瘋狂！全服英雄透過每日汗水鍛鍊，轉化為真實輸出！',
-          maxHp: bossData.maxHp || 350000,
-          currentHp: finalHp,
-          seasonStart: bossData.seasonStart || '2026/08/12',
-          seasonEnd: bossData.seasonEnd || '2026/08/31'
+          ...currentBoss,
+          seasonStart: activeStartStr,
+          seasonEnd: activeEndStr,
+          currentHp: currentBoss.currentHp !== undefined ? currentBoss.currentHp : Math.max(0, (currentBoss.maxHp || 350000) - (currentSummary.totalDamage || 0))
         },
-        summary: summary,
-        heroStats: sortedHeroes,
-        guildContributions: sortedGuilds,
-        activities: activities.filter(a => a.isValidAttack).slice(0, 20)
+        summary: currentSummary,
+        heroStats: currentHeroStats,
+        guildContributions: currentGuilds,
+        activities: (gameState?.activities || []).filter(a => a.isValidAttack).slice(0, 30)
       };
     }
 

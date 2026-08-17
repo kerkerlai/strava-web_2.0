@@ -88,13 +88,17 @@ def fetch_interval_activities(ath_id, ym, headers):
         r = requests.get(url, headers=headers, timeout=15)
         if r.status_code != 200: return []
         
-        prefix = "data-react-props=\'"
-        s_idx = r.text.find(prefix)
+        idx = r.text.find("data-react-props")
+        if idx == -1: return []
+        
+        s_idx = r.text.find("{", idx)
         if s_idx == -1: return []
-        e_idx = r.text.find("\'>", s_idx)
+        
+        tag_end = r.text.find(">", idx)
+        e_idx = r.text.rfind("}", s_idx, tag_end)
         if e_idx == -1: return []
         
-        raw_str = r.text[s_idx + len(prefix) : e_idx]
+        raw_str = r.text[s_idx : e_idx + 1]
         fixed_str = raw_str.replace(r"\&quot;", r"\&quot;").replace(r"\\&quot;", r"\&quot;")
         clean_json = html.unescape(fixed_str)
         p, _ = json.JSONDecoder().raw_decode(clean_json)
