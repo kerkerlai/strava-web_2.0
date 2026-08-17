@@ -578,7 +578,9 @@ async function archiveCurrentSeason() {
     // 3. WORLD BOSS SNAPSHOT (100% 絕對零誤差：直接克隆當前 live gameState 中的全部實時輸出與排行榜)
     else {
       const currentHeroStats = JSON.parse(JSON.stringify(gameState?.heroStats || window.heroStatsList || []));
+      currentHeroStats.sort((a, b) => (b.totalDamage || b.score || 0) - (a.totalDamage || a.score || 0));
       const currentGuilds = JSON.parse(JSON.stringify(gameState?.guilds || []));
+      currentGuilds.sort((a, b) => (b.totalDamage || b.score || 0) - (a.totalDamage || a.score || 0));
       const currentSummary = JSON.parse(JSON.stringify(gameState?.summary || {}));
       const currentBoss = JSON.parse(JSON.stringify(gameState?.boss || {}));
 

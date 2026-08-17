@@ -466,6 +466,8 @@ async function syncFromDatabase() {
         trimp = duration * ratio * Math.exp(1.92 * ratio);
       }
 
+      let suffer = 0;
+      if (avgHr > 0) suffer = Math.pow(avgHr / 150.0, 2) * duration;
       const isZone2 = (0.60 * hero.maxHr) <= avgHr && avgHr <= (0.75 * hero.maxHr);
       const zoneLabel = isZone2 ? '🟢 有氧燃脂' : (avgHr > 0.75 * hero.maxHr ? '🚀 極限無氧' : '🚶 暖身/恢復');
 
@@ -498,6 +500,7 @@ async function syncFromDatabase() {
         calories: calories,
         isManual: isManual,
         isExcluded: isExcluded,
+        suffer: suffer,
         guild: hero.guild,
         trimp: Math.round(trimp * 10) / 10,
         gap: Math.round(gap * 10) / 10,
