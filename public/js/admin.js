@@ -261,6 +261,7 @@ function populateGlobalSettings() {
   if (sEnd) sEnd.value = dateToInputVal(endVal);
 
   populateBossConfig();
+  onExpansionModeChanged();
 }
 
 /**
@@ -367,12 +368,18 @@ async function saveGlobalGameSettings() {
   rpgConfig.seasonEnd = seasonEnd;
 
   try {
-    await window.supabase.insert("game_config", [
-      { key: "active_mode", value: activeMode },
-      { key: "boss_config", value: bossConfig },
-      { key: "classic_config", value: classicConfig },
-      { key: "rpg_config", value: rpgConfig }
+    await Promise.all([
+      window.supabase.insert("game_config", { key: "active_mode", value: activeMode }),
+      window.supabase.insert("game_config", { key: "boss_config", value: bossConfig }),
+      window.supabase.insert("game_config", { key: "classic_config", value: classicConfig }),
+      window.supabase.insert("game_config", { key: "rpg_config", value: rpgConfig })
     ]);
+
+    if (gameState) {
+      gameState.activeMode = activeMode;
+      gameState.seasonStart = seasonStart;
+      gameState.seasonEnd = seasonEnd;
+    }
     if (window.syncFromDatabase) await window.syncFromDatabase();
     alert(`🎉 資料片模式已成功切換為【${getModeLabel(activeMode)}】並同步寫入 Supabase！全伺服器玩家立即生效！`);
     showAdminToast("✅ 賽事核心參數已成功儲存至雲端！");
@@ -391,7 +398,7 @@ function getSnapshotsList() {
   if (gameState?.snapshots && Array.isArray(gameState.snapshots)) {
     return gameState.snapshots;
   }
-  return [window.frozenClassic0717];
+  return [];
 }
 
 function renderSnapshotTable() {
@@ -454,22 +461,17 @@ async function toggleSnapshotVisibility(snapId) {
   if (!snap) return;
 
   snap.isVisible = snap.isVisible === false ? true : false;
-  localStorage.setItem('custom_archived_seasons', JSON.stringify(snapshots));
+  if (gameState) gameState.snapshots = snapshots;
 
   try {
-    const res = await fetch('/api/settings/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ snapshots: snapshots, archivedSeasons: snapshots })
-    });
-    if (res.ok) {
-      await fetchAdminData();
-      renderSnapshotTable();
-      alert(`✅ 快照【${snap.seasonTitle}】已成功設為【${snap.isVisible ? '前台正常顯示' : '隱藏不顯示'}】！`);
-    }
-  } catch (e) {
+    await window.supabase.insert("game_config", { key: "snapshots", value: snapshots });
+    if (window.syncFromDatabase) await window.syncFromDatabase();
     renderSnapshotTable();
-    alert(`✅ 已在本地更新顯示設定！`);
+    showAdminToast(`✅ 快照【${snap.seasonTitle}】已成功設為【${snap.isVisible ? '前台正常顯示' : '隱藏不顯示'}】！`);
+  } catch (e) {
+    console.error("Toggle Snapshot Visibility Error:", e);
+    renderSnapshotTable();
+    showAdminToast("❌ 更新失敗：" + e.message, true);
   }
 }
 
@@ -481,11 +483,15 @@ async function deleteSnapshot(snapId) {
   if (!confirm(`確定要從 Supabase 雲端資料庫永久刪除快照【${snapTitle}】嗎？\n刪除後此歷史紀錄將從過往英雄史中移除！`)) return;
 
   const updatedSnapshots = snapshots.filter(s => s.id !== snapId);
+  if (gameState) gameState.snapshots = updatedSnapshots;
+  renderSnapshotTable();
+
   try {
     await window.supabase.insert("game_config", { key: "snapshots", value: updatedSnapshots });
     if (window.syncFromDatabase) await window.syncFromDatabase();
     renderSnapshotTable();
     alert(`🗑️ 快照【${snapTitle}】已成功自 Supabase 雲端資料庫刪除！前後台已同步更新！`);
+    showAdminToast(`🗑️ 快照【${snapTitle}】已成功刪除！`);
   } catch (e) {
     console.error("Delete Snapshot Error:", e);
     alert("❌ 刪除失敗：" + e.message);

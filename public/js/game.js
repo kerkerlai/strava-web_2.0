@@ -270,8 +270,7 @@ async function fetchGameData() {
     } catch(e) {}
   }
 
-  const storedMode = localStorage.getItem('iron_heroes_active_mode');
-  const effectiveMode = storedMode || gameState?.activeMode || 'world_boss';
+  const effectiveMode = gameState?.activeMode || 'world_boss';
   if (gameState) gameState.activeMode = effectiveMode;
   setupImmersiveNavigation(effectiveMode);
 }
