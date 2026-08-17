@@ -354,38 +354,33 @@ async function saveGlobalGameSettings() {
   const seasonStart = inputValToDate(startRaw) || '2026/08/12';
   const seasonEnd = inputValToDate(endRaw) || '2026/08/31';
 
-  const payload = {
-    activeMode: activeMode,
-    seasonStart: seasonStart,
-    seasonEnd: seasonEnd,
-    boss: {
-      seasonStart: seasonStart,
-      seasonEnd: seasonEnd
-    }
-  };
+  const bossConfig = gameState?.boss || {};
+  bossConfig.seasonStart = seasonStart;
+  bossConfig.seasonEnd = seasonEnd;
 
-  gameState.activeMode = activeMode;
-  gameState.seasonStart = seasonStart;
-  gameState.seasonEnd = seasonEnd;
-  if (!gameState.boss) gameState.boss = {};
-  gameState.boss.seasonStart = seasonStart;
-  gameState.boss.seasonEnd = seasonEnd;
+  const classicConfig = gameState?.classic || {};
+  classicConfig.seasonStart = seasonStart;
+  classicConfig.seasonEnd = seasonEnd;
 
-  localStorage.setItem('iron_heroes_active_mode', activeMode);
-  localStorage.setItem('iron_heroes_season_start', seasonStart);
-  localStorage.setItem('iron_heroes_season_end', seasonEnd);
-  localStorage.setItem('game_state', JSON.stringify(gameState));
+  const rpgConfig = gameState?.rpg || {};
+  rpgConfig.seasonStart = seasonStart;
+  rpgConfig.seasonEnd = seasonEnd;
 
   try {
-    await fetch('/api/settings/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-  } catch (e) {}
-
-  alert(`✅ 資料片模式已切換為【${getModeLabel(activeMode)}】！前台看板與設定已即時生效！`);
-  onExpansionModeChanged();
+    await window.supabase.insert("game_config", [
+      { key: "active_mode", value: activeMode },
+      { key: "boss_config", value: bossConfig },
+      { key: "classic_config", value: classicConfig },
+      { key: "rpg_config", value: rpgConfig }
+    ]);
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    alert(`🎉 資料片模式已成功切換為【${getModeLabel(activeMode)}】並同步寫入 Supabase！全伺服器玩家立即生效！`);
+    showAdminToast("✅ 賽事核心參數已成功儲存至雲端！");
+    onExpansionModeChanged();
+  } catch (e) {
+    console.error("Save Global Settings Error:", e);
+    alert("❌ 儲存至雲端資料庫異常：" + e.message);
+  }
 }
 
 // -------------------------------------------------------------
@@ -393,11 +388,10 @@ async function saveGlobalGameSettings() {
 // -------------------------------------------------------------
 
 function getSnapshotsList() {
-  let list = [...(gameState?.snapshots || gameState?.archivedSeasons || [])];
-  if (!list.some(s => s.id === 'classic_0717')) {
-    list.unshift(window.frozenClassic0717);
+  if (gameState?.snapshots && Array.isArray(gameState.snapshots)) {
+    return gameState.snapshots;
   }
-  return list;
+  return [window.frozenClassic0717];
 }
 
 function renderSnapshotTable() {
@@ -484,25 +478,18 @@ async function deleteSnapshot(snapId) {
   const snap = snapshots.find(s => s.id === snapId);
   const snapTitle = snap?.seasonTitle || snapId;
 
-  if (!confirm(`確定要永久刪除快照【${snapTitle}】嗎？\n刪除後此歷史紀錄將從過往英雄史中移除！`)) return;
+  if (!confirm(`確定要從 Supabase 雲端資料庫永久刪除快照【${snapTitle}】嗎？\n刪除後此歷史紀錄將從過往英雄史中移除！`)) return;
 
   const updatedSnapshots = snapshots.filter(s => s.id !== snapId);
-  localStorage.setItem("custom_archived_seasons", JSON.stringify(updatedSnapshots));
-  if (gameState) {
-    gameState.snapshots = updatedSnapshots;
-    gameState.archivedSeasons = updatedSnapshots;
-  }
-  renderSnapshotTable();
-
   try {
-    await fetch("/api/snapshots/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: snapId })
-    });
-  } catch (e) {}
-
-  alert(`🗑️ 快照【${snapTitle}】已成功刪除！前後台已同步更新！`);
+    await window.supabase.insert("game_config", { key: "snapshots", value: updatedSnapshots });
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    renderSnapshotTable();
+    alert(`🗑️ 快照【${snapTitle}】已成功自 Supabase 雲端資料庫刪除！前後台已同步更新！`);
+  } catch (e) {
+    console.error("Delete Snapshot Error:", e);
+    alert("❌ 刪除失敗：" + e.message);
+  }
 }
 
 function exportSingleSnapshot(snapId) {
@@ -1083,106 +1070,82 @@ async function handleManualAttack(e) {
 
   const heroName = document.getElementById('inp-hero').value;
   const type = document.getElementById('inp-type').value;
-  const duration = parseFloat(document.getElementById('inp-duration').value);
-  const avgHr = parseFloat(document.getElementById('inp-avg-hr').value);
-  const maxHr = parseFloat(document.getElementById('inp-max-hr').value);
-  const calories = parseFloat(document.getElementById('inp-calories').value);
+  const duration = parseFloat(document.getElementById('inp-duration').value) || 0;
+  const avgHr = parseFloat(document.getElementById('inp-avg-hr').value) || 0;
+  const maxHr = parseFloat(document.getElementById('inp-max-hr').value) || 0;
+  const calories = parseFloat(document.getElementById('inp-calories').value) || 0;
   const title = document.getElementById('inp-title').value.trim() || '手動打卡鍛鍊';
 
-  const newActId = `ACT-${Date.now()}`;
-  const now = new Date();
-  const dateStr = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()}`;
-  const timeStr = `${dateStr} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+  if (!heroName) { alert('請選擇英雄'); return; }
+  if (duration <= 0) { alert('運動時長必須大於 0 分鐘'); return; }
 
-  const payload = {
+  const newActId = `manual_${Date.now()}`;
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+  const actObj = {
     id: newActId,
     hero: heroName,
-    type: type,
-    title: title,
-    duration: duration,
-    avgHr: avgHr,
-    maxHr: maxHr,
-    calories: calories,
     date: dateStr,
-    time: timeStr
+    type: type,
+    name: title,
+    duration: duration,
+    distance: 0,
+    elevation: 0,
+    avg_hr: avgHr,
+    max_hr: maxHr,
+    calories: calories,
+    is_manual: true,
+    is_excluded: false
   };
 
   try {
-    const localSaved = JSON.parse(localStorage.getItem('manual_activities') || '[]');
-    localSaved.unshift(payload);
-    localStorage.setItem('manual_activities', JSON.stringify(localSaved));
-  } catch (e) {}
-
-  try {
-    const res = await fetch('/api/activities/add', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    if (res.ok && data.success) {
-      alert(`🎉 登錄成功！${heroName} 完成鍛鍊打卡，數據已即時計入前台看板！`);
-      document.getElementById('form-manual-entry').reset();
-      await fetchAdminData();
-      populateBossConfig();
-      renderActivityTable();
-    }
-  } catch (err) {
-    alert(`🎉 登錄成功！${heroName} 完成鍛鍊打卡，數據已即時計入前台看板！`);
+    await window.supabase.insert("activities", actObj);
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    alert(`🎉 登錄成功！${heroName} 完成鍛鍊打卡，數據已即時同步至 Supabase 雲端資料庫並計入前台看板！`);
     document.getElementById('form-manual-entry').reset();
-    renderActivityTable();
+    previewDamageCalculation();
+  } catch (err) {
+    console.error("Manual Entry Error:", err);
+    alert("❌ 補登失敗：" + err.message);
   }
 }
 
 async function saveClassicSettings() {
   const minDur = parseFloat(document.getElementById('cfg-classic-min-dur')?.value) || 30;
-  const payload = {
-    boss: {
-      rules: {
-        minDurationMinutes: minDur
-      }
-    }
-  };
+  const classicConfig = gameState?.classic || {};
+  classicConfig.minDuration = minDur;
+
   try {
-    const res = await fetch('/api/settings/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (res.ok) alert('✅ 經典競技參數已成功儲存！');
-  } catch (e) {}
+    await window.supabase.insert("game_config", { key: "classic_config", value: classicConfig });
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    alert('✅ 經典競技參數已成功儲存至 Supabase 雲端資料庫！');
+  } catch (e) {
+    console.error("Save Classic Settings Error:", e);
+    alert("❌ 儲存失敗：" + e.message);
+  }
 }
 
 async function saveBossSettings() {
   const name = document.getElementById('cfg-boss-name').value.trim();
-  const maxHp = parseInt(document.getElementById('cfg-boss-maxhp').value);
-  const curHp = parseInt(document.getElementById('cfg-boss-currhp').value);
-  const minDur = parseFloat(document.getElementById('cfg-min-dur').value);
-  const magMult = parseFloat(document.getElementById('cfg-mag-mult').value);
+  const maxHp = parseInt(document.getElementById('cfg-boss-maxhp').value) || 350000;
+  const minDur = parseFloat(document.getElementById('cfg-min-dur').value) || 30.0;
+  const magMult = parseFloat(document.getElementById('cfg-mag-mult').value) || 15.0;
 
-  const payload = {
-    boss: {
-      name: name,
-      maxHp: maxHp,
-      currentHp: curHp,
-      rules: {
-        minDurationMinutes: minDur,
-        physMultiplier: 1.0,
-        magicMultiplier: magMult,
-        critMultiplier: 100.0
-      }
-    }
-  };
+  const bossConfig = gameState?.boss || {};
+  bossConfig.name = name;
+  bossConfig.maxHp = maxHp;
+  if (!bossConfig.rules) bossConfig.rules = {};
+  bossConfig.rules.minDurationMinutes = minDur;
+  bossConfig.rules.magicMultiplier = magMult;
 
   try {
-    const res = await fetch('/api/settings/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (res.ok) alert('✅ Boss 數值與參數已成功更新！');
+    await window.supabase.insert("game_config", { key: "boss_config", value: bossConfig });
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    alert('✅ 世界 Boss 數值與參數已成功更新至 Supabase 雲端資料庫！');
   } catch (e) {
     console.error('Save boss settings error:', e);
+    alert("❌ 儲存失敗：" + e.message);
   }
 }
 

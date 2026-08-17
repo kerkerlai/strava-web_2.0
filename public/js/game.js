@@ -1577,11 +1577,10 @@ function closeHeroProfileModal() {
 // -------------------------------------------------------------
 
 function getAllSnapshots() {
-  let list = [...(gameState?.snapshots || gameState?.archivedSeasons || [])];
-  if (!list.some(s => s.id === 'classic_0717')) {
-    list.unshift(window.frozenClassic0717);
+  if (gameState?.snapshots && Array.isArray(gameState.snapshots)) {
+    return gameState.snapshots;
   }
-  return list;
+  return [window.frozenClassic0717];
 }
 
 function populateChroniclesDropdown() {
