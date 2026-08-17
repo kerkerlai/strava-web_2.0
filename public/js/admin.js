@@ -924,6 +924,7 @@ async function saveBossSettings() {
   const bossConfig = gameState?.boss || {};
   bossConfig.name = name;
   bossConfig.maxHp = maxHp;
+  delete bossConfig.currentHp;
   if (!bossConfig.rules) bossConfig.rules = {};
   bossConfig.rules.minDurationMinutes = minDur;
   bossConfig.rules.magicMultiplier = magMult;

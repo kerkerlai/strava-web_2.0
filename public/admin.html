@@ -326,8 +326,9 @@
                 <input type="number" id="cfg-boss-maxhp" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono outline-none">
               </div>
               <div>
-                <label class="font-bold text-slate-300 block mb-1">目前剩餘血量</label>
-                <input type="number" id="cfg-boss-currhp" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-rose-400 font-mono font-bold outline-none">
+                <label class="font-bold text-slate-300 block mb-1">目前剩餘血量 (自動結算)</label>
+                <input type="text" disabled value="隨玩家傷害自動扣減" class="w-full bg-slate-900 border border-slate-700/50 rounded-xl px-3 py-2 text-slate-500 font-bold outline-none cursor-not-allowed">
+                <input type="hidden" id="cfg-boss-currhp">
               </div>
             </div>
 

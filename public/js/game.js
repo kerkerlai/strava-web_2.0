@@ -1953,7 +1953,7 @@ function renderChroniclesView() {
       totalMag: snap.magDmg || 0,
       totalCrit: snap.critDmg || 0
     };
-    const heroList = snap.heroStats || snap.allHeroes || snap.topHeroes || [];
+    const heroList = (snap.heroStats || snap.allHeroes || snap.topHeroes || []).sort((a,b) => (b.totalDamage || b.score || 0) - (a.totalDamage || a.score || 0));
     const guildList = snap.guildContributions || snap.guilds || [];
     const activities = snap.activities || [];
 
