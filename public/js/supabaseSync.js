@@ -158,10 +158,10 @@ async function syncFromDatabase() {
 
     // 4. Parse & Calculate Activities
     const activities = [];
-    let totalSeasonPhys = 0;
-    let totalSeasonMag = 0;
-    let totalSeasonCrit = 0;
-    let totalSeasonDmg = 0;
+
+    const physMult = bossConfig?.rules?.physMultiplier || 1.0;
+    const magMult = bossConfig?.rules?.magicMultiplier || 15.0;
+    const critMult = bossConfig?.rules?.critMultiplier || 100.0;
 
     (activitiesData || []).forEach(a => {
       const actId = String(a.id);
@@ -181,7 +181,6 @@ async function syncFromDatabase() {
       const isValid = (duration >= 30.0) && inSeason && !isExcluded;
       let physDmg = 0;
       let magDmg = 0;
-      let critDmg = 0;
       let gap = Math.max(0, maxHr - avgHr);
       let trimp = 0.0;
 
@@ -194,24 +193,18 @@ async function syncFromDatabase() {
       const zoneLabel = isZone2 ? '🟢 有氧燃脂' : (avgHr > 0.75 * hero.maxHr ? '🚀 極限無氧' : '🚶 暖身/恢復');
 
       if (isValid) {
-        physDmg = Math.round(calories);
-        magDmg = Math.round(trimp * 15);
-        critDmg = Math.round(gap * 100);
+        physDmg = Math.round(calories * physMult);
+        magDmg = Math.round(trimp * magMult);
 
         if (heroAggregates[a.hero]) {
           heroAggregates[a.hero].physDmg += physDmg;
           heroAggregates[a.hero].magDmg += magDmg;
-          heroAggregates[a.hero].critDmg += critDmg;
-          heroAggregates[a.hero].totalDmg += (physDmg + magDmg);
           heroAggregates[a.hero].maxGap = Math.max(heroAggregates[a.hero].maxGap, gap);
           heroAggregates[a.hero].validCount += 1;
         }
-
-        totalSeasonPhys += physDmg;
-        totalSeasonMag += magDmg;
-        totalSeasonCrit += critDmg;
-        totalSeasonDmg += (physDmg + magDmg);
       }
+
+      const singleCritDmg = Math.round(gap * critMult);
 
       activities.push({
         id: actId,
@@ -236,34 +229,24 @@ async function syncFromDatabase() {
         zoneLabel: zoneLabel,
         isValidAttack: isValid,
         inSeason: inSeason,
-        damage: physDmg + magDmg,
+        damage: isValid ? (physDmg + magDmg) : 0,
         physDmg: physDmg,
         magDmg: magDmg,
-        critDmg: critDmg
+        critDmg: singleCritDmg
       });
     });
 
-    // 5. Build Guilds List
-    const guilds = Object.keys(guildMembers).map(gName => {
-      const gActs = activities.filter(a => a.guild === gName && a.isValidAttack);
-      const gDmg = gActs.reduce((s, a) => s + (a.damage || 0), 0);
-      const meta = GUILD_COLOR_MAP[gName] || { badge: '🛡️', color: '#64748b' };
-      return {
-        name: gName,
-        badge: meta.badge,
-        color: meta.color,
-        members: guildMembers[gName],
-        totalDamage: gDmg,
-        score: gDmg,
-        validWorkouts: gActs.length
-      };
-    });
-
-    // 6. Build Hero Stats List
+    // 5. Build Hero Stats List (取單次最大 Gap 作為賽季爆擊傷害，並完整累計至總傷害)
     const heroStatsList = heroes.map(h => {
       const heroActs = activities.filter(a => a.hero === h.name && !a.isExcluded);
       const inSeasonActs = heroActs.filter(a => a.inSeason);
-      const agg = heroAggregates[h.name] || { physDmg: 0, magDmg: 0, critDmg: 0, totalDmg: 0, maxGap: 0, validCount: 0 };
+      const agg = heroAggregates[h.name] || { physDmg: 0, magDmg: 0, maxGap: 0, validCount: 0 };
+      
+      // 爆擊傷害：取賽季中單次最大 Gap * critMultiplier (100)
+      const heroCritDmg = agg.validCount > 0 ? Math.round(agg.maxGap * critMult) : 0;
+      // 英雄總輸出 = 普攻總和 + 魔攻總和 + 最高單次爆擊輸出
+      const heroTotalDmg = agg.physDmg + agg.magDmg + heroCritDmg;
+
       return {
         name: h.name,
         guild: h.guild,
@@ -272,11 +255,11 @@ async function syncFromDatabase() {
         maxHr: h.maxHr,
         avatar: h.avatar,
         stravaId: h.stravaId,
-        score: agg.totalDmg,
-        totalDamage: agg.totalDmg,
+        score: heroTotalDmg,
+        totalDamage: heroTotalDmg,
         physDmg: agg.physDmg,
         magDmg: agg.magDmg,
-        critDmg: agg.critDmg,
+        critDmg: heroCritDmg,
         maxGap: agg.maxGap,
         validWorkouts: agg.validCount,
         totalDuration: inSeasonActs.reduce((s, a) => s + (a.duration || 0), 0),
@@ -285,6 +268,29 @@ async function syncFromDatabase() {
         zone2Count: inSeasonActs.filter(a => a.isZone2).length
       };
     });
+
+    // 6. Build Guilds List (公會總傷害為所屬英雄總輸出之和)
+    const guilds = Object.keys(guildMembers).map(gName => {
+      const gHeroes = heroStatsList.filter(h => h.guild === gName);
+      const gDmg = gHeroes.reduce((s, h) => s + (h.totalDamage || 0), 0);
+      const gValidCount = gHeroes.reduce((s, h) => s + (h.validWorkouts || 0), 0);
+      const meta = GUILD_COLOR_MAP[gName] || { badge: '🛡️', color: '#64748b' };
+      return {
+        name: gName,
+        badge: meta.badge,
+        color: meta.color,
+        members: guildMembers[gName],
+        totalDamage: gDmg,
+        score: gDmg,
+        validWorkouts: gValidCount
+      };
+    });
+
+    // 7. Calculate Total Server-wide Season Damage
+    const totalSeasonPhys = heroStatsList.reduce((s, h) => s + (h.physDmg || 0), 0);
+    const totalSeasonMag = heroStatsList.reduce((s, h) => s + (h.magDmg || 0), 0);
+    const totalSeasonCrit = heroStatsList.reduce((s, h) => s + (h.critDmg || 0), 0);
+    const totalSeasonDmg = totalSeasonPhys + totalSeasonMag + totalSeasonCrit;
 
     const bossMaxHp = bossConfig.maxHp || 350000;
     const bossCurrentHp = Math.max(0, bossMaxHp - totalSeasonDmg);

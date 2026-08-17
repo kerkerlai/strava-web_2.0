@@ -969,8 +969,20 @@ function renderRPGClassTalentView() {
 
 function renderWorldBossView() {
   const boss = gameState?.boss || {};
-  const currentHp = boss.currentHp !== undefined ? boss.currentHp : 0;
   const maxHp = boss.maxHp || 350000;
+
+  // Damage breakdown (普攻總和 + 魔攻總和 + 單次最大Gap爆擊)
+  let totalPhys = 0, totalMag = 0, totalCrit = 0, totalDmg = 0;
+  if (heroStatsList && heroStatsList.length > 0) {
+    heroStatsList.forEach(h => {
+      totalPhys += (h.physDmg || 0);
+      totalMag += (h.magDmg || 0);
+      totalCrit += (h.critDmg || 0);
+      totalDmg += (h.totalDamage || 0);
+    });
+  }
+
+  const currentHp = Math.max(0, maxHp - totalDmg);
   const hpPct = Math.max(0, Math.min(100, (currentHp / maxHp) * 100));
 
   const nameEl = document.getElementById('boss-name-text');
@@ -993,17 +1005,6 @@ function renderWorldBossView() {
 
   const seasonPeriodEl = document.getElementById("boss-season-period");
   if (seasonPeriodEl) seasonPeriodEl.innerText = `討伐戰區間：${seasonStart} ~ ${seasonEnd}`;
-
-  // Damage breakdown
-  let totalPhys = 0, totalMag = 0, totalCrit = 0, totalDmg = 0;
-  if (heroStatsList && heroStatsList.length > 0) {
-    heroStatsList.forEach(h => {
-      totalPhys += (h.physDmg || 0);
-      totalMag += (h.magDmg || 0);
-      totalCrit += (h.critDmg || 0);
-      totalDmg += (h.totalDamage || 0);
-    });
-  }
 
   const statTot = document.getElementById('stat-total-damage');
   const statPhy = document.getElementById('stat-phys-dmg');
