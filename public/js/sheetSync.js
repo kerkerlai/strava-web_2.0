@@ -496,6 +496,10 @@ async function syncFromGoogleSheet() {
       }
     };
 
+    window.gameState = gameState;
+    window.heroStatsList = heroStatsList;
+    window.dispatchEvent(new CustomEvent("gameStateSynced", { detail: gameState }));
+
     renderAllGameViews();
 
     // Persist full synced data to server with calculated boss & heroStats to prevent bounce-back

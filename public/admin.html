@@ -466,14 +466,35 @@
             <span id="crawler-athlete-count" class="text-[11px] text-slate-400">共 7 位選手</span>
           </div>
 
-          <!-- Add Athlete Form -->
-          <div class="flex flex-wrap items-center gap-2 p-2.5 bg-slate-900/60 rounded-xl border border-slate-800">
-            <input type="text" id="crawler-new-ath-id" placeholder="Strava 數字 ID (如 468395126)" class="flex-1 min-w-[140px] bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono outline-none focus:border-cyan-500">
-            <select id="crawler-new-ath-hero" class="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-bold outline-none focus:border-cyan-500">
-            </select>
-            <button onclick="addCrawlerAthlete()" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg transition whitespace-nowrap">
-              + 新增選手
-            </button>
+          <!-- Enhanced Add Athlete Form -->
+          <div class="space-y-2.5 p-3.5 bg-slate-900/70 rounded-2xl border border-slate-800">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label class="text-[10px] font-bold text-slate-300 block mb-1">🔗 Strava 數字 ID (必填)</label>
+                <input type="text" id="crawler-new-ath-id" placeholder="輸入 Strava ID (如 468395126)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs outline-none focus:border-cyan-500">
+              </div>
+              <div>
+                <label class="text-[10px] font-bold text-slate-300 block mb-1">👤 選擇既有英雄 (從名冊選取)</label>
+                <select id="crawler-new-ath-hero" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold text-xs outline-none focus:border-cyan-500">
+                </select>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+              <div>
+                <label class="text-[10px] font-bold text-slate-300 block mb-1">✍️ 或手動自訂新英雄姓名 (若選單無此人)</label>
+                <input type="text" id="crawler-new-ath-custom-name" placeholder="輸入新英雄名字 (如 David 或 wOWOW)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-cyan-500">
+              </div>
+              <div>
+                <label class="text-[10px] font-bold text-slate-300 block mb-1">🛡️ 所屬公會 (自訂姓名時填寫)</label>
+                <input type="text" id="crawler-new-ath-custom-guild" placeholder="輸入公會名稱 (如 Cake 或 自由英雄)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-cyan-500">
+              </div>
+            </div>
+            <div class="flex justify-end pt-1">
+              <button onclick="addCrawlerAthlete()" class="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center space-x-1.5">
+                <i data-lucide="user-plus" class="w-4 h-4"></i>
+                <span>+ 綁定並加入爬蟲監控名冊</span>
+              </button>
+            </div>
           </div>
 
           <!-- Athletes Table -->

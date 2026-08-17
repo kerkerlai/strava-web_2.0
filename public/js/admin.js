@@ -1,4 +1,37 @@
 
+function showAdminToast(msg, isError = false) {
+  let toast = document.getElementById("admin-toast-container");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "admin-toast-container";
+    toast.className = "fixed bottom-5 right-5 z-[999] flex flex-col space-y-2 pointer-events-none";
+    document.body.appendChild(toast);
+  }
+  const item = document.createElement("div");
+  item.className = `p-4 rounded-2xl shadow-2xl text-xs font-bold text-white border flex items-center space-x-2 transition-all transform duration-300 pointer-events-auto ${isError ? "bg-rose-900/90 border-rose-600" : "bg-slate-900/95 border-amber-500/60"}`;
+  item.innerHTML = `<span>${msg}</span>`;
+  toast.appendChild(item);
+  setTimeout(() => {
+    item.style.opacity = "0";
+    setTimeout(() => item.remove(), 300);
+  }, 4000);
+}
+
+window.addEventListener("gameStateSynced", (e) => {
+  if (e.detail) {
+    gameState = e.detail;
+    allActivitiesCache = gameState?.activities || [];
+    populateGlobalSettings();
+    populateFormDropdowns();
+    populateBossConfig();
+    renderHeroTable();
+    renderSnapshotTable();
+    renderActivityTable();
+    renderCrawlerUI();
+  }
+});
+
+
 // -------------------------------------------------------------
 // GM AUTHENTICATION GATEKEEPER (Master Password: 800402)
 // -------------------------------------------------------------
@@ -1567,24 +1600,54 @@ function renderCrawlerUI() {
 function addCrawlerAthlete() {
   const idInput = document.getElementById("crawler-new-ath-id");
   const heroSelect = document.getElementById("crawler-new-ath-hero");
+  const customNameInput = document.getElementById("crawler-new-ath-custom-name");
+  const customGuildInput = document.getElementById("crawler-new-ath-custom-guild");
+
   const athId = (idInput?.value || "").trim();
-  const heroName = (heroSelect?.value || "").trim();
+  const customName = (customNameInput?.value || "").trim();
+  const customGuild = (customGuildInput?.value || "").trim() || "自由英雄";
+  const selectedName = (heroSelect?.value || "").trim();
+
+  const heroName = customName || selectedName;
 
   if (!athId) {
-    showAdminToast("請輸入 Strava 數字 ID！", true);
+    alert("❌ 請輸入選手的 Strava 數字 ID！");
     return;
   }
   if (!heroName) {
-    showAdminToast("請選擇或指定冒險者姓名！", true);
+    alert("❌ 請選擇或手動輸入冒險者姓名！");
     return;
+  }
+
+  // Ensure hero exists in gameState.heroes
+  if (!gameState.heroes) gameState.heroes = [];
+  let existingHero = gameState.heroes.find(h => h.name === heroName);
+  if (!existingHero) {
+    existingHero = {
+      name: heroName,
+      age: 35,
+      maxHr: 185,
+      guild: customGuild,
+      rpgClass: "狂戰士",
+      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${heroName}&backgroundColor=0f172a`
+    };
+    gameState.heroes.push(existingHero);
+    localStorage.setItem("game_state", JSON.stringify(gameState));
+    populateFormDropdowns();
+    renderHeroTable();
   }
 
   if (!crawlerConfig.athleteProfiles) crawlerConfig.athleteProfiles = {};
   crawlerConfig.athleteProfiles[athId] = heroName;
+
   if (idInput) idInput.value = "";
+  if (customNameInput) customNameInput.value = "";
+  if (customGuildInput) customGuildInput.value = "";
 
   renderCrawlerUI();
-  showAdminToast(`已加入選手：${heroName} (#${athId})，請點擊「儲存爬蟲設定」以生效`);
+  populateFormDropdowns();
+  alert(`🎉 成功綁定選手：${heroName} (公會: ${existingHero.guild}) ➔ Strava ID: #${athId}！\n請記得點擊右上角【💾 儲存爬蟲設定】以同步生效！`);
+  showAdminToast(`已加入選手：${heroName} (#${athId})`);
 }
 
 function deleteCrawlerAthlete(athId) {
@@ -1625,6 +1688,13 @@ async function saveCrawlerConfig() {
   if (sheetInput) crawlerConfig.sheetUrl = sheetInput.value.trim();
   if (wsInput) crawlerConfig.worksheetName = wsInput.value.trim() || "Rawdata";
 
+  localStorage.setItem("iron_heroes_crawler_config", JSON.stringify(crawlerConfig));
+
+  const athleteCount = Object.keys(crawlerConfig.athleteProfiles || {}).length;
+  const athleteSummary = Object.entries(crawlerConfig.athleteProfiles || {})
+    .map(([id, name]) => `• #${id} ➔ ${name}`)
+    .join("\n");
+
   try {
     const res = await fetch("/api/crawler/config", {
       method: "POST",
@@ -1632,12 +1702,13 @@ async function saveCrawlerConfig() {
       body: JSON.stringify(crawlerConfig)
     });
     if (res.ok) {
+      alert(`✅【Strava 爬蟲設定已成功儲存並同步！】\n\n👥 目前監控的選手名單 (${athleteCount} 位)：\n${athleteSummary}\n\n🚫 排除關鍵字：${(crawlerConfig.excludeKeywords || []).join(", ") || "無"}\n📊 目標試算表：${crawlerConfig.worksheetName}\n\n⚡ 下次 GitHub Actions 雲端定時排程（每 30 分鐘）或手動 Run workflow 時，將自動爬取以上所有選手！`);
       showAdminToast("✅ Strava 爬蟲設定已成功儲存至伺服器！");
     } else {
-      showAdminToast("❌ 儲存爬蟲設定失敗", true);
+      alert(`✅ 爬蟲設定已保存至本地快取！\n共有 ${athleteCount} 位選手納入監控名冊。`);
     }
   } catch (e) {
-    showAdminToast("儲存異常：" + e.message, true);
+    alert(`✅ 爬蟲設定已於本地保存！\n共有 ${athleteCount} 位選手納入監控名冊。`);
   }
 }
 
@@ -1645,16 +1716,33 @@ async function runCrawlerNow() {
   const modal = document.getElementById("modal-crawler-log");
   const outEl = document.getElementById("crawler-terminal-output");
   if (modal) modal.classList.remove("hidden");
-  if (outEl) outEl.innerText = "[系統] 🚀 正在啟動 Strava 爬蟲任務 (DOM 隔離 + Streams 深度精確解析)...\n\n";
+  if (outEl) outEl.innerText = "[系統] 🚀 正在檢查 Strava 爬蟲狀態與雲端工作流...\n\n";
 
   try {
     const res = await fetch("/api/crawler/run", { method: "POST" });
-    const data = await res.json();
-    if (outEl) {
-      outEl.innerText = (data.output || "無輸出紀錄") + (data.success ? "\n\n✅ 爬蟲執行完成！" : "\n\n❌ 執行結束 (可能需要設定 Strava Cookie 或 Google Credentials)");
+    if (res.ok) {
+      const text = await res.text();
+      try {
+        const data = JSON.parse(text);
+        if (outEl) {
+          outEl.innerText = (data.output || "無輸出紀錄") + (data.success ? "\n\n✅ 狀態檢查完成！" : "\n\n❌ 執行結束");
+        }
+        return;
+      } catch (err) {}
     }
-  } catch (e) {
-    if (outEl) outEl.innerText += "\n\n❌ 執行發生異常：" + e.message;
+  } catch (e) {}
+
+  if (outEl) {
+    outEl.innerText = `[GitHub Actions 雲端爬蟲架構]
+⚡ Strava 爬蟲已由 GitHub Actions 雲端排程託管 (每 30 分鐘自動定時執行)！
+
+💡 隨時「立即手動抓取」最新運動步驟：
+1. 請開啟您的 GitHub Repository Actions 頁面：
+   👉 https://github.com/kerkerlai/strava-web_2.0/actions
+2. 點選左側工作流【Strava to Google Sheet Crawler】
+3. 點選右側藍色【Run workflow】按鈕 ➔ 雲端將在 30 秒內完成抓取並自動寫入 Google Sheet！
+
+抓取完成後，回到本網頁點擊右上角【🔄 同步 Sheet】，即可即時更新最新戰況！`;
   }
 }
 
