@@ -30,7 +30,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_PATH = os.path.join(BASE_DIR, 'data', 'crawler_config.json')
 
 def load_crawler_config():
-    """Loads configuration from JSON file or environment variables"""
+    """Loads configuration dynamically from Web API, JSON file, or environment variables"""
     config = {
         "athleteProfiles": {
             "468395126": "Kerker",
@@ -46,6 +46,7 @@ def load_crawler_config():
         "worksheetName": "Rawdata"
     }
 
+    # 1. Try reading local crawler_config.json
     if os.path.exists(CONFIG_PATH):
         try:
             with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
@@ -53,6 +54,25 @@ def load_crawler_config():
                 config.update(saved)
         except Exception as e:
             print(f"⚠️ 讀取 {CONFIG_PATH} 失敗，使用預設配置: {e}")
+
+    # 2. Try fetching live dynamic config from Vercel Web API
+    web_api_urls = [
+        os.environ.get('WEB_API_URL'),
+        "https://strava-web-2-0.vercel.app/api/crawler/config",
+        "https://strava-web_2.0.vercel.app/api/crawler/config"
+    ]
+    for api_url in web_api_urls:
+        if not api_url: continue
+        try:
+            r = requests.get(api_url, timeout=5)
+            if r.status_code == 200:
+                web_cfg = r.json()
+                if isinstance(web_cfg, dict) and 'athleteProfiles' in web_cfg:
+                    config.update(web_cfg)
+                    print(f"🌐 [動態配置] 成功從 Web 雲端 ({api_url}) 同步最新選手名單 (共 {len(config['athleteProfiles'])} 位選手)！")
+                    break
+        except Exception:
+            pass
 
     # Environment variable overrides
     if os.environ.get('ATHLETE_PROFILES_JSON'):
@@ -82,7 +102,7 @@ def get_env_var(var_name):
         return None
     return val
 
-def setup_google_sheet(creds_json, sheet_url, worksheet_name):
+def setup_google_sheet(creds_json, sheet_url, worksheet_name, config_obj=None):
     try:
         creds_dict = json.loads(creds_json)
         scope = [
@@ -368,6 +388,6 @@ if __name__ == "__main__":
         print("❌ 核心環境變數缺失 (GOOGLE_SHEETS_CREDENTIALS / STRAVA_COOKIE)，請確認後再執行。")
         sys.exit(1)
 
-    ws = setup_google_sheet(GOOGLE_CREDS_JSON, cfg['sheetUrl'], cfg['worksheetName'])
+    ws = setup_google_sheet(GOOGLE_CREDS_JSON, cfg['sheetUrl'], cfg['worksheetName'], cfg)
     if ws:
         run_scraper(ws, STRAVA_COOKIE, cfg['athleteProfiles'], cfg['excludeKeywords'])
