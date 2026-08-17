@@ -391,21 +391,24 @@
       </div>
     </div>
 
-    <!-- Hero Roster CRUD Management (動態對應當前資料片) -->
+    <!-- Hero Roster View & Sheet Sync (以 Google Sheet《參賽者名單》為唯一真實來源) -->
     <div class="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
       <div class="border-b border-slate-800 pb-3 flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center space-x-2">
           <i data-lucide="users" class="w-5 h-5 text-cyan-400"></i>
-          <h2 id="hero-roster-title" class="text-base font-bold text-white">👥 參賽者名冊與小隊管理</h2>
+          <div>
+            <h2 id="hero-roster-title" class="text-base font-bold text-white">👥 參賽者名冊與小隊管理 (Google Sheet 即時同步)</h2>
+            <p class="text-xs text-slate-400 mt-0.5">本名冊由 Google Sheet《參賽者名單》工作表即時同步（包含姓名、年齡、公會、RPG職業與 Strava ID）。</p>
+          </div>
         </div>
         <div class="flex items-center space-x-2">
-          <button id="btn-random-classes" onclick="randomizeAllHeroClasses()" class="hidden px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center space-x-1.5" title="以洗牌演算法平衡隨機分配五大職業">
-            <i data-lucide="dices" class="w-4 h-4"></i>
-            <span>🎲 一鍵隨機抽籤分配全體職業</span>
-          </button>
-          <button onclick="openAddHeroModal()" class="px-3.5 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center space-x-1.5">
-            <i data-lucide="user-plus" class="w-4 h-4"></i>
-            <span>新增冒險者</span>
+          <a href="https://docs.google.com/spreadsheets/d/1gNr8ptE_zjIeZsliaEqddqp5xz3Ir0LT7AkLmnSh3pY/edit#gid=434984273" target="_blank" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-md flex items-center space-x-1.5">
+            <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+            <span>📊 開啟 Google Sheet 編輯名單</span>
+          </a>
+          <button onclick="syncFromGoogleSheet()" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold rounded-xl text-xs transition shadow-md flex items-center space-x-1.5">
+            <i data-lucide="refresh-cw" class="w-4 h-4 text-emerald-400"></i>
+            <span>🔄 重新同步 Sheet</span>
           </button>
         </div>
       </div>

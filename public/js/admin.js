@@ -895,9 +895,10 @@ function renderHeroTable() {
       <td class="p-3 font-mono text-cyan-400 font-bold">${h.maxHr} bpm</td>
       <td class="p-3"><span class="bg-slate-800 text-amber-300 px-2 py-0.5 rounded text-[11px]">${h.guild}</span></td>
       <td class="p-3">${classCellHtml}</td>
-      <td class="p-3 text-right space-x-2">
-        <button onclick="openEditHeroModal('${h.name}')" class="text-cyan-400 hover:text-cyan-300 font-bold text-xs">編輯</button>
-        <button onclick="deleteHero('${h.name}')" class="text-rose-400 hover:text-rose-300 font-bold text-xs">刪除</button>
+      <td class="p-3 text-right">
+        <a href="https://docs.google.com/spreadsheets/d/1gNr8ptE_zjIeZsliaEqddqp5xz3Ir0LT7AkLmnSh3pY/edit#gid=434984273" target="_blank" class="inline-flex items-center space-x-1 text-emerald-400 hover:text-emerald-300 font-bold text-xs bg-emerald-950/40 border border-emerald-800/60 px-2.5 py-1 rounded-lg transition" title="前往 Google Sheet 修改此成員的年齡、公會、職業或 Strava ID">
+          <span>在 Sheet 編輯 ↗</span>
+        </a>
       </td>
     `;
 
