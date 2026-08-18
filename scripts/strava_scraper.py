@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Strava 雲端爬蟲 (2 個月月份區間精準掃描版 + React Microfrontend 支援 + Supabase 直連)
+Strava 雲端爬蟲 (Supabase 寫入版 + DOM 隔離表格掃描與 Streams 權威解析)
 """
 
 import os
 import re
 import time
-import sys
 import json
-import html
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 
+# ==========================================
+# Supabase 環境變數與設定
+# ==========================================
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://yxkvbkfnlqwlybhmugki.supabase.co").strip().rstrip("/")
 SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY", os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4a3Zia2ZubHF3bHliaG11Z2tpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5NDIyODYsImV4cCI6MjEwMjUxODI4Nn0.Jky4o080Gn9-prx-G0aj7dCl7rmA1dJWN3BZgkVmjwo")).strip()
 
@@ -24,43 +25,39 @@ SUPABASE_HEADERS = {
     "Prefer": "resolution=merge-duplicates"
 }
 
+# ==========================================
+# 輔助函式 (API 讀取)
+# ==========================================
 def load_heroes_from_supabase():
-    """從 Supabase heroes 表動態取得所有冒險者及其 Strava 數字 ID (完全無 Hardcode)"""
     url = f"{SUPABASE_URL}/rest/v1/heroes?select=*"
     try:
         r = requests.get(url, headers=SUPABASE_HEADERS, timeout=10)
         if r.status_code == 200:
-            heroes_list = r.json()
             profiles = {}
-            for h in heroes_list:
+            for h in r.json():
                 sid = str(h.get("strava_id", "")).strip()
                 if sid and re.match(r"^\d+$", sid):
                     profiles[sid] = h.get("name")
             print(f"👥 [Supabase] 成功載入 {len(profiles)} 位已綁定 Strava ID 的英雄選手：{list(profiles.values())}")
             return profiles
-        else:
-            print(f"❌ 讀取 Supabase heroes 失敗 (HTTP {r.status_code}): {r.text}")
     except Exception as e:
         print(f"❌ 連線 Supabase 異常: {e}")
     return {}
 
 def load_exclude_keywords_from_supabase():
-    """從 Supabase game_config 表動態取得排除關鍵字"""
     url = f"{SUPABASE_URL}/rest/v1/game_config?key=eq.exclude_keywords"
     try:
         r = requests.get(url, headers=SUPABASE_HEADERS, timeout=10)
         if r.status_code == 200:
             data = r.json()
             if data and "value" in data[0]:
-                kws = data[0]["value"]
-                print(f"⚙️ [Supabase] 成功載入排除關鍵字設定：{kws}")
-                return kws
+                print(f"⚙️ [Supabase] 成功載入排除關鍵字設定")
+                return data[0]["value"]
     except Exception as e:
         print(f"⚠️ 無法取得排除關鍵字: {e}")
     return ["羽球"]
 
 def get_existing_activity_ids():
-    """從 Supabase activities 表取得所有現存活動 ID，避免重複寫入"""
     url = f"{SUPABASE_URL}/rest/v1/activities?select=id"
     try:
         r = requests.get(url, headers=SUPABASE_HEADERS, timeout=10)
@@ -72,245 +69,166 @@ def get_existing_activity_ids():
         print(f"⚠️ 無法取得現存活動 ID: {e}")
     return set()
 
+# ==========================================
+# 輔助函式 (解析與數值處理)
+# ==========================================
+def parse_time_to_minutes(time_str):
+    if not time_str: return 0.0
+    time_str = time_str.strip()
+    if 'h' in time_str.lower() or 'm' in time_str.lower() or 's' in time_str.lower():
+        h = int(re.search(r'(\d+)\s*h', time_str, re.I).group(1)) if re.search(r'(\d+)\s*h', time_str, re.I) else 0
+        m = int(re.search(r'(\d+)\s*m', time_str, re.I).group(1)) if re.search(r'(\d+)\s*m', time_str, re.I) else 0
+        s = int(re.search(r'(\d+)\s*s', time_str, re.I).group(1)) if re.search(r'(\d+)\s*s', time_str, re.I) else 0
+        return round(h * 60 + m + s / 60.0, 1)
+    parts = time_str.split(':')
+    if len(parts) == 3:
+        try: return round(int(parts[0]) * 60 + int(parts[1]) + float(parts[2]) / 60.0, 1)
+        except ValueError: pass
+    elif len(parts) == 2:
+        try: return round(int(parts[0]) + float(parts[1]) / 60.0, 1)
+        except ValueError: pass
+    return 0.0
+
+def detect_sport_type(act_name):
+    lower_name = act_name.lower()
+    if any(k in lower_name for k in ["ride", "cycling", "bike", "騎車", "單車", "自行車", "騎行", "公路車"]):
+        return "Ride"
+    if any(k in lower_name for k in ["run", "running", "jog", "跑步", "路跑", "晨跑", "夜跑", "慢跑", "間歇跑"]):
+        return "Run"
+    if any(k in lower_name for k in ["weight", "lifting", "strength", "gym", "重量訓練", "重訓", "力量訓練", "健身", "胸", "背", "腿"]):
+        return "WeightTraining"
+    if any(k in lower_name for k in ["walk", "walking", "hike", "hiking", "步行", "健走", "散步", "爬山", "登山", "健行"]):
+        return "Walk"
+    if any(k in lower_name for k in ["swim", "swimming", "游泳"]):
+        return "Swim"
+    return "Workout"
+
 def calculate_calories(avg_hr, duration_mins):
     try:
         hr = float(avg_hr)
-        dur = float(duration_mins)
-        c = ((-59.0 + (0.45 * hr) + (0.074 * 55) + (0.274 * 34)) / 4.184) * dur
-        return max(int(round(c)), int(round(dur * 4.0)))
+        mins = float(duration_mins)
+        c = ((-59.0 + (0.45 * hr) + (0.074 * 55) + (0.274 * 34)) / 4.184) * mins
+        return max(int(round(c)), int(round(mins * 4.0)))
     except Exception:
         return int(round(float(duration_mins) * 4.5))
 
-def fetch_interval_activities(ath_id, ym, headers):
-    """透過月份區間 API 抓取該選手該月份的所有活動"""
-    url = f"https://www.strava.com/athletes/{ath_id}/interval?interval={ym}&interval_type=month&chart_type=miles&year_offset=0"
-    try:
-        r = requests.get(url, headers=headers, timeout=15)
-        if r.status_code != 200: return []
-        
-        idx = r.text.find("data-react-props")
-        if idx == -1: return []
-        
-        s_idx = r.text.find("{", idx)
-        if s_idx == -1: return []
-        
-        tag_end = r.text.find(">", idx)
-        e_idx = r.text.rfind("}", s_idx, tag_end)
-        if e_idx == -1: return []
-        
-        raw_str = r.text[s_idx : e_idx + 1]
-        fixed_str = raw_str.replace(r"\&quot;", r"\&quot;").replace(r"\\&quot;", r"\&quot;")
-        clean_json = html.unescape(fixed_str)
-        p, _ = json.JSONDecoder().raw_decode(clean_json)
-        entries = p.get("appContext", {}).get("preFetchedEntries", [])
-        return [e.get("activity") for e in entries if e.get("activity")]
-    except Exception:
-        return []
+def safe_int(val, default=0):
+    try: return int(float(val))
+    except (ValueError, TypeError): return default
 
-def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
+def safe_float(val, default=0.0):
+    try: return float(val)
+    except (ValueError, TypeError): return default
+
+# ==========================================
+# 爬蟲核心邏輯
+# ==========================================
+def scrape_strava_activities(cookie_str, athlete_profiles, exclude_keywords):
     if not athlete_profiles:
-        print("⚠️ 目前 Supabase 中無任何綁定 Strava ID 的選手，結束本次爬取。")
+        print("⚠️ 目前無任何綁定 Strava ID 的選手，結束本次爬取。")
         return
 
-    # 確保 Cookie 包含 _strava4_session
-    clean_cookie = strava_cookie.strip()
+    clean_cookie = cookie_str.strip()
     if clean_cookie and not clean_cookie.startswith("_strava4_session=") and "=" not in clean_cookie:
         clean_cookie = f"_strava4_session={clean_cookie}"
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Cookie": clean_cookie,
-        "X-Requested-With": "XMLHttpRequest",
-        "Accept": "text/javascript, application/json, text/html, */*",
-        "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7"
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Cookie': clean_cookie,
+        'Accept-Language': 'en-US,en;q=0.9,zh-TW;q=0.8,zh;q=0.7',
+        'X-Requested-With': 'XMLHttpRequest'
     }
+    session = requests.Session()
+    session.headers.update(headers)
 
-    # 計算當前月與前一個月的 YYYYMM (涵蓋 2 個月完整區間)
     now = datetime.now()
-    curr_ym = now.strftime("%Y%m")
-    prev_month_date = now.replace(day=1) - timedelta(days=1)
-    prev_ym = prev_month_date.strftime("%Y%m")
-    months_to_scan = [curr_ym, prev_ym]
+    current_month = now.strftime("%Y%m")
+    last_month = (now.replace(day=1) - timedelta(days=1)).strftime("%Y%m")
+    months_to_check = [current_month, last_month]
 
+    print("\n[DEBUG] 🚀 啟動「個人主頁直擊模式」(雙維度 + Streams 深度精確解析)...")
+    activity_ownership = {}
+
+    # ----------------------------------------------------
+    # 階段 1：初階掃描，取得所有活動 ID (主頁 + 雙維度 API)
+    # ----------------------------------------------------
+    for ath_id, member_name in athlete_profiles.items():
+        print(f"\n[DEBUG] 正在掃描 {member_name} 的專屬活動資料...")
+        found_ids = []
+        
+        # 1. 主頁清單
+        try:
+            resp1 = session.get(f"https://www.strava.com/athletes/{ath_id}?num_entries=20", timeout=15)
+            clean_text1 = resp1.text.replace('\\"', '"').replace('\\/', '/')
+            home_matches = re.findall(r'(?:/activities/|Activity-|"activity_id":\s*|activity_id=)(\d{8,14})', clean_text1)
+            found_ids.extend(home_matches)
+        except Exception:
+            pass
+            
+        # 2. 月度圖表 API (miles 與 hours 兩種視圖)
+        for yyyymm in months_to_check:
+            for c_type in ["miles", "hours"]:
+                try:
+                    api_url = f"https://www.strava.com/athletes/{ath_id}/interval?interval={yyyymm}&interval_type=month&chart_type={c_type}&year_offset=0"
+                    resp_api = session.get(api_url, timeout=15)
+                    clean_api = resp_api.text.replace('\\"', '"').replace('\\/', '/')
+                    api_matches = re.findall(r'(?:/activities/|Activity-|"activity_id":\s*|activity_id=)(\d{8,14})', clean_api)
+                    found_ids.extend(api_matches)
+                except Exception:
+                    pass
+            
+        for act_id in set(found_ids):
+            if act_id not in activity_ownership:
+                activity_ownership[act_id] = member_name
+                
+        time.sleep(1) # 保護機制，避免被鎖
+
+    print(f"\n[DEBUG] 掃描完成！共獲取 {len(activity_ownership)} 筆活動 ID。")
+    
     existing_ids = get_existing_activity_ids()
     new_activities_to_insert = []
 
-    print(f"🚀 開始針對 {len(athlete_profiles)} 位選手掃描近 2 個月 ({prev_ym} ~ {curr_ym}) 完整運動紀錄...")
+    # ----------------------------------------------------
+    # 階段 2：深度解析每一筆活動的實際數據 (DOM)
+    # ----------------------------------------------------
+    for act_id, member_name in activity_ownership.items():
+        if str(act_id) in existing_ids:
+            continue
 
-    for ath_id, member_name in athlete_profiles.items():
-        print(f"\n🔍 正在掃描選手：{member_name} (Strava ID: #{ath_id})...")
-        
-        all_month_acts = []
-        for ym in months_to_scan:
-            m_acts = fetch_interval_activities(ath_id, ym, headers)
-            all_month_acts.extend(m_acts)
-            time.sleep(0.5)
-
-        # 若月份 interval 沒抓到，Fallback 抓選手主頁
-        if not all_month_acts:
-            try:
-                profile_url = f"https://www.strava.com/athletes/{ath_id}"
-                resp = requests.get(profile_url, headers=headers, timeout=15)
-                if resp.status_code == 200:
-                    soup = BeautifulSoup(resp.text, "html.parser")
-                    for comp in soup.select("[data-react-class=Microfrontend]"):
-                        props_raw = comp.get("data-react-props")
-                        if not props_raw: continue
-                        try:
-                            p_data = json.loads(props_raw)
-                            entries = p_data.get("appContext", {}).get("preFetchedEntries", [])
-                            for e in entries:
-                                if e.get("activity"): all_month_acts.append(e.get("activity"))
-                        except Exception: pass
-            except Exception: pass
-
-        print(f"  📡 近 2 個月共解析出 {len(all_month_acts)} 筆運動紀錄")
-
-        for act in all_month_acts:
-            act_id = str(act.get("id"))
-            if not act_id or act_id in existing_ids:
-                continue
-
-            act_name = act.get("activityName") or "運動"
-
-            # Check Excluded Keywords
-            if any(kw in act_name for kw in exclude_keywords if kw):
-                print(f"  🚫 略過排除關鍵字活動：{act_name} (#{act_id})")
-                continue
-
-            sport_type = act.get("type", "Workout")
-            elapsed = act.get("elapsedTime", 0)
-            moving_time_mins = round(elapsed / 60) if elapsed else 0
-            distance_km = 0
-            elevation_m = 0
-            avg_hr = 0
-            max_hr = 0
-            calories = 0
-            start_time_readable = None
-
-            for st in act.get("stats", []):
-                val_str = st.get("value", "")
-                sub = st.get("key", "")
-                if "Time" in val_str or "stat_one" in sub:
-                    m_min = re.search(r"(\d+)m", val_str)
-                    m_hr = re.search(r"(\d+)h", val_str)
-                    h = int(m_hr.group(1)) if m_hr else 0
-                    m = int(m_min.group(1)) if m_min else 0
-                    if h or m: moving_time_mins = h * 60 + m
-                elif "bpm" in val_str:
-                    m_bpm = re.search(r"(\d+)", val_str)
-                    if m_bpm: avg_hr = int(m_bpm.group(1))
-                elif "Cal" in val_str or "kcal" in val_str:
-                    m_cal = re.search(r"([\d,]+)", val_str)
-                    if m_cal: calories = int(m_cal.group(1).replace(",", ""))
-
-            if act.get("startDate"):
-                try:
-                    clean_dt = act.get("startDate").replace("Z", "+00:00")
-                    dt_obj = datetime.fromisoformat(clean_dt)
-                    local_dt = dt_obj + timedelta(hours=8)
-                    start_time_readable = local_dt.strftime("%Y/%m/%d %H:%M:%S")
-                except Exception:
-                    pass
-
-            # 若詳情資料缺漏，抓取活動單頁
-            if not calories or not avg_hr:
-                detail_url = f"https://www.strava.com/activities/{act_id}"
-                try:
-                    detail_resp = requests.get(detail_url, headers=headers, timeout=15)
-                    if detail_resp.status_code == 200:
-                        d_soup = BeautifulSoup(detail_resp.text, "html.parser")
-                        stat_spans = d_soup.select(".inline-stats li, .stats li, [data-testid=stat]")
-                        for li in stat_spans:
-                            txt = li.text.strip()
-                            if ("時間" in txt or "Time" in txt) and not moving_time_mins:
-                                num = re.search(r"(\d+)\s*(?:小時|h|hr)?\s*(\d+)?\s*(?:分|m|min)?", txt)
-                                if num:
-                                    h = int(num.group(1)) if "小時" in txt or "h" in txt else 0
-                                    mins = int(num.group(2) or num.group(1)) if h > 0 else int(num.group(1))
-                                    moving_time_mins = h * 60 + mins
-                            elif ("心率" in txt or "Heart Rate" in txt or "bpm" in txt) and not avg_hr:
-                                num = re.search(r"(\d+)\s*bpm", txt)
-                                if num: avg_hr = int(num.group(1))
-                            elif ("卡路里" in txt or "熱量" in txt or "Calories" in txt) and not calories:
-                                num = re.search(r"([\d,]+)\s*(?:卡|kcal|Calories)", txt)
-                                if num: calories = int(num.group(1).replace(",", ""))
-                except Exception:
-                    pass
-
-            # --- Streams 數據流核實與補充 (權威秒級來源) ---
-            if not avg_hr or not max_hr or not moving_time_mins or not calories:
-                try:
-                    streams_url = f"https://www.strava.com/activities/{act_id}/streams?stream_types%5B%5D=heartrate&stream_types%5B%5D=time&stream_types%5B%5D=distance"
-                    s_resp = requests.get(streams_url, headers=headers, timeout=10)
-                    if s_resp.status_code == 200:
-                        s_data = s_resp.json()
-                        hr_list = s_data.get("heartrate", [])
-                        time_list = s_data.get("time", [])
-                        dist_list = s_data.get("distance", [])
-
-                        if hr_list and not avg_hr:
-                            avg_hr = round(sum(hr_list) / len(hr_list))
-                        if hr_list and not max_hr:
-                            max_hr = max(hr_list)
-                        if time_list and not moving_time_mins:
-                            moving_time_mins = round(time_list[-1] / 60.0)
-                        if dist_list and not distance_km:
-                            distance_km = round(dist_list[-1] / 1000.0, 2)
-                        print(f"    📡 Streams 補充 -> 時長: {moving_time_mins}分, 平均HR: {avg_hr} bpm, 最大HR: {max_hr} bpm, 距離: {distance_km} km")
-                except Exception as e:
-                    print(f"    ⚠️ Streams 讀取異常: {e}")
-
-            if not calories and avg_hr and moving_time_mins:
-                calories = calculate_calories(avg_hr, moving_time_mins)
-                print(f"    🔥 依心率自動推算熱量: {calories} kcal")
-
-            if not start_time_readable:
-                start_time_readable = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-
-            act_data = {
-                "id": act_id,
-                "hero": member_name,
-                "date": start_time_readable,
-                "type": sport_type,
-                "name": act_name,
-                "duration": moving_time_mins,
-                "distance": distance_km,
-                "elevation": elevation_m,
-                "avg_hr": avg_hr,
-                "max_hr": max_hr or (avg_hr + 20 if avg_hr else 0),
-                "calories": calories,
-                "is_manual": False,
-                "is_excluded": False
-            }
-
-            new_activities_to_insert.append(act_data)
-            existing_ids.add(act_id)
-            print(f"  ✨ 成功抓取新運動：{member_name} | {act_name} | 時間: {start_time_readable} | 時長: {moving_time_mins}分 | 平均心率: {avg_hr} bpm | 熱量: {calories}卡")
-
-            time.sleep(1)
-
-    # Write new activities to Supabase
-    if new_activities_to_insert:
-        print(f"\n💾 正在將 {len(new_activities_to_insert)} 筆新運動寫入 Supabase 資料庫...")
-        insert_url = f"{SUPABASE_URL}/rest/v1/activities"
+        print(f"\n[DEBUG] ▶️ 開始處理活動 ID:{act_id} | 擁有者:{member_name}")
+        act_url = f"https://www.strava.com/activities/{act_id}"
         try:
-            r = requests.post(insert_url, headers=SUPABASE_HEADERS, json=new_activities_to_insert, timeout=15)
-            if r.status_code in [200, 201]:
-                print(f"🎉 成功寫入 {len(new_activities_to_insert)} 筆新運動至 Supabase！前台看板與世界 Boss 戰況已秒速同步！")
-            else:
-                print(f"❌ 寫入 Supabase 失敗 (HTTP {r.status_code}): {r.text}")
+            act_resp = session.get(act_url, timeout=15)
         except Exception as e:
-            print(f"❌ 寫入 Supabase 發生錯誤: {e}")
-    else:
-        print("\n✅ 本次檢查無新活動需要寫入，全服近 2 個月數據已是最新狀態！")
+            print(f"[DEBUG]   ❌ 活動頁面請求失敗: {e}")
+            continue
 
-if __name__ == "__main__":
-    print("=== Strava 雲端爬蟲 (2 個月月份區間精準掃描直連版) 啟動 ===")
-    STRAVA_COOKIE = os.environ.get("STRAVA_COOKIE", "").strip()
-    if not STRAVA_COOKIE:
-        print("❌ 警告：未提供 STRAVA_COOKIE 環境變數，請在 GitHub Secrets 設定。")
-    
-    heroes = load_heroes_from_supabase()
-    exclude_keywords = load_exclude_keywords_from_supabase()
-    scrape_strava_activities(STRAVA_COOKIE, heroes, exclude_keywords)
+        act_soup = BeautifulSoup(act_resp.text, 'html.parser')
+
+        # --- 1. 活動名稱與關鍵字排除 ---
+        act_name = "未知活動"
+        h1_tag = act_soup.find('h1')
+        if h1_tag and h1_tag.text.strip():
+            act_name = h1_tag.text.strip()
+        elif act_soup.title and act_soup.title.text.strip():
+            parts = act_soup.title.text.strip().split(' - ')
+            if len(parts) >= 1:
+                act_name = parts[0].strip()
+
+        if any(kw in act_name for kw in exclude_keywords if kw):
+            print(f"[DEBUG]   🚫 略過：活動名稱包含黑名單關鍵字。")
+            continue
+
+        sport_type = detect_sport_type(act_name)
+
+        # --- 2. 開始時間解析 (GMT+8 台灣時間) ---
+        start_time_readable = "未知時間"
+        time_element = act_soup.find('time')
+        if time_element and time_element.get('datetime'):
+            try:
+                dt_utc = datetime.strptime(time_element.get('datetime').replace('Z', ''), "%Y-%m-%dT%H:%M:%S")
+                # 轉成台灣時間並格式化給 Supabase (yyyy/mm/dd HH:MM:SS)
+                start_time_readable = (dt_utc + timedelta(hours=8)).strftime("%Y/%m/%d %H:%M:%S")
+            except Exception: pass
+            
+        if start_time_readable ==
