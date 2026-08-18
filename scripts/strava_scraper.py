@@ -165,7 +165,7 @@ def scrape_strava_activities(cookie_str, athlete_profiles, exclude_keywords):
         except Exception:
             pass
             
-        # 2. 月度圖表 API (miles 與 hours 兩種視圖)
+        # 2. 月度圖表 API
         for yyyymm in months_to_check:
             for c_type in ["miles", "hours"]:
                 try:
@@ -181,7 +181,7 @@ def scrape_strava_activities(cookie_str, athlete_profiles, exclude_keywords):
             if act_id not in activity_ownership:
                 activity_ownership[act_id] = member_name
                 
-        time.sleep(1) # 保護機制，避免被鎖
+        time.sleep(1) # 保護機制
 
     print(f"\n[DEBUG] 掃描完成！共獲取 {len(activity_ownership)} 筆活動 ID。")
     
@@ -205,7 +205,7 @@ def scrape_strava_activities(cookie_str, athlete_profiles, exclude_keywords):
 
         act_soup = BeautifulSoup(act_resp.text, 'html.parser')
 
-        # --- 1. 活動名稱與關鍵字排除 ---
+        # --- 1. 活動名稱 ---
         act_name = "未知活動"
         h1_tag = act_soup.find('h1')
         if h1_tag and h1_tag.text.strip():
@@ -221,17 +221,16 @@ def scrape_strava_activities(cookie_str, athlete_profiles, exclude_keywords):
 
         sport_type = detect_sport_type(act_name)
 
-        # --- 2. 開始時間解析 (GMT+8 台灣時間) ---
+        # --- 2. 開始時間解析 (GMT+8) ---
         start_time_readable = "未知時間"
         time_element = act_soup.find('time')
         if time_element and time_element.get('datetime'):
             try:
                 dt_utc = datetime.strptime(time_element.get('datetime').replace('Z', ''), "%Y-%m-%dT%H:%M:%S")
-                # 轉成台灣時間並格式化給 Supabase (yyyy/mm/dd HH:MM:SS)
                 start_time_readable = (dt_utc + timedelta(hours=8)).strftime("%Y/%m/%d %H:%M:%S")
             except Exception: pass
             
-        if start_time_readable == "未知時間":       # ⬅️ 確保這裡結尾是 "未知時間": 
+        if start_time_readable == "未知時間":
             m = re.search(r'(\d{1,2}:\d{2}\s+[AP]M)\s+on\s+[A-Za-z]+,\s+([A-Za-z]+\s+\d{1,2},\s+\d{4})', act_soup.text)
             if m:
                 try:
@@ -240,6 +239,131 @@ def scrape_strava_activities(cookie_str, athlete_profiles, exclude_keywords):
                     start_time_readable = dt_parsed.strftime("%Y/%m/%d %H:%M:%S")
                 except Exception: pass
         
-        # 若各種方法都無法解析時間，改預設為現在時間
-        if start_time_readable == "未知時間":       # ⬅️ 確保這裡也是 "未知時間":
+        if start_time_readable == "未知時間":
             start_time_readable = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+
+        # --- 3. DOM 解析核心 ---
+        moving_time_mins = ""
+        avg_heartrate = ""
+        max_heartrate = ""
+        calories = ""
+        distance_km = ""
+        elevation_m = 0
+
+        # A. 針對 GPS 運動
+        stats_ul = act_soup.find('ul', class_=re.compile(r'inline-stats', re.I))
+        if stats_ul:
+            for li in stats_ul.find_all('li'):
+                strong = li.find(['strong', 'b'])
+                if not strong: continue
+                val = strong.text.strip()
+                li_txt = li.text.strip().lower()
+                if 'moving time' in li_txt:
+                    moving_time_mins = parse_time_to_minutes(val)
+                elif 'distance' in li_txt:
+                    d_m = re.search(r'([\d\.]+)', val)
+                    if d_m: distance_km = d_m.group(1)
+
+        # B. 針對室內/重訓運動 (從表格 <tr> 提取) --> 成功抓到卡路里的核心!
+        for tr in act_soup.find_all('tr'):
+            tr_text = tr.text.lower()
+            if 'heart rate' in tr_text or '心率' in tr_text:
+                bpms = re.findall(r'(\d+)\s*bpm', tr.text)
+                if len(bpms) >= 2:
+                    avg_heartrate, max_heartrate = bpms[0], bpms[1]
+                elif len(bpms) == 1 and not avg_heartrate:
+                    avg_heartrate = bpms[0]
+            if not calories and ('cal' in tr_text or '熱量' in tr_text):
+                c_m = re.search(r'(\d+)', tr.text)
+                if c_m: calories = c_m.group(1)
+
+        # --- 4. Streams API 補充 ---
+        if not avg_heartrate or not max_heartrate or not moving_time_mins or not calories:
+            try:
+                streams_url = f"https://www.strava.com/activities/{act_id}/streams?stream_types%5B%5D=heartrate&stream_types%5B%5D=time&stream_types%5B%5D=distance"
+                s_resp = session.get(streams_url, timeout=10)
+                if s_resp.status_code == 200:
+                    s_data = s_resp.json()
+                    hr_list = s_data.get('heartrate', [])
+                    time_list = s_data.get('time', [])
+                    dist_list = s_data.get('distance', [])
+
+                    if hr_list and not avg_heartrate:
+                        avg_heartrate = round(sum(hr_list) / len(hr_list))
+                    if hr_list and not max_heartrate:
+                        max_heartrate = max(hr_list)
+                    if time_list and not moving_time_mins:
+                        moving_time_mins = round(time_list[-1] / 60.0, 1)
+                    if dist_list and not distance_km:
+                        distance_km = round(dist_list[-1] / 1000.0, 2)
+                    print(f"[DEBUG]   📡 Streams 補充 -> 時長: {moving_time_mins}分, 平均HR: {avg_heartrate}, 最大HR: {max_heartrate}")
+            except Exception as e:
+                print(f"[DEBUG]   Streams 讀取異常: {e}")
+
+        # --- 5. 自動熱量推算 ---
+        if not calories and avg_heartrate and moving_time_mins:
+            calories = calculate_calories(avg_heartrate, moving_time_mins)
+            print(f"[DEBUG]   🔥 依心率自動推算熱量: {calories} kcal")
+            
+        if not moving_time_mins or not avg_heartrate:
+            print(f"[DEBUG]   ⚠️ 捨棄：抓不到心率或時長，將視為無效紀錄。")
+            continue
+
+        # 轉回 Supabase 要的格式
+        final_duration = safe_int(moving_time_mins)
+        final_avg_hr = safe_int(avg_heartrate)
+        final_max_hr = safe_int(max_heartrate) or (final_avg_hr + 20 if final_avg_hr > 0 else 0)
+        final_cal = safe_int(calories)
+        final_dist = safe_float(distance_km)
+
+        print(f"[DEBUG]   👉 最終 -> 項目:{sport_type} | 時長:{final_duration}分 | 距離:{final_dist}km | 平均HR:{final_avg_hr} | 熱量:{final_cal} kcal")
+
+        act_data = {
+            "id": str(act_id),
+            "hero": member_name,
+            "date": start_time_readable,
+            "type": sport_type,
+            "name": act_name,
+            "duration": final_duration,
+            "distance": final_dist,
+            "elevation": safe_float(elevation_m),
+            "avg_hr": final_avg_hr,
+            "max_hr": final_max_hr,
+            "calories": final_cal,
+            "is_manual": False,
+            "is_excluded": False
+        }
+
+        new_activities_to_insert.append(act_data)
+        existing_ids.add(str(act_id))
+        print(f"  ✨ 成功打包單筆：{member_name} / {act_name}")
+        
+        time.sleep(1)
+
+    # ----------------------------------------------------
+    # 階段 3：批次寫入 Supabase
+    # ----------------------------------------------------
+    if new_activities_to_insert:
+        print(f"\n💾 正在將 {len(new_activities_to_insert)} 筆新運動寫入 Supabase...")
+        insert_url = f"{SUPABASE_URL}/rest/v1/activities"
+        try:
+            r = requests.post(insert_url, headers=SUPABASE_HEADERS, json=new_activities_to_insert, timeout=15)
+            if r.status_code in [200, 201]:
+                print(f"🎉 成功寫入 {len(new_activities_to_insert)} 筆資料！資料庫已同步。")
+            else:
+                print(f"❌ 寫入失敗 (HTTP {r.status_code}): {r.text}")
+        except Exception as e:
+            print(f"❌ 寫入發生錯誤: {e}")
+    else:
+        print("\n✅ 本次未發現任何新活動需要更新，資料庫已是最新的！")
+
+
+if __name__ == "__main__":
+    print("=== Strava 雲端爬蟲 (Supabase 寫入版 + DOM 隔離與 Streams 權威解析) ===")
+    STRAVA_COOKIE = os.environ.get("STRAVA_COOKIE", "").strip()
+    if not STRAVA_COOKIE:
+        print("❌ 警告：未設定 STRAVA_COOKIE 環境變數，私密活動與心率資料可能抓不到。")
+    
+    heroes = load_heroes_from_supabase()
+    exclude_kws = load_exclude_keywords_from_supabase()
+    scrape_strava_activities(STRAVA_COOKIE, heroes, exclude_kws)
