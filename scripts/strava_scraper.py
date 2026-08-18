@@ -231,4 +231,15 @@ def scrape_strava_activities(cookie_str, athlete_profiles, exclude_keywords):
                 start_time_readable = (dt_utc + timedelta(hours=8)).strftime("%Y/%m/%d %H:%M:%S")
             except Exception: pass
             
-        if start_time_readable ==
+        if start_time_readable == "未知時間":       # ⬅️ 確保這裡結尾是 "未知時間": 
+            m = re.search(r'(\d{1,2}:\d{2}\s+[AP]M)\s+on\s+[A-Za-z]+,\s+([A-Za-z]+\s+\d{1,2},\s+\d{4})', act_soup.text)
+            if m:
+                try:
+                    time_str = f"{m.group(1)} {m.group(2)}"
+                    dt_parsed = datetime.strptime(time_str, "%I:%M %p %B %d, %Y")
+                    start_time_readable = dt_parsed.strftime("%Y/%m/%d %H:%M:%S")
+                except Exception: pass
+        
+        # 若各種方法都無法解析時間，改預設為現在時間
+        if start_time_readable == "未知時間":       # ⬅️ 確保這裡也是 "未知時間":
+            start_time_readable = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
