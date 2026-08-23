@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script>
+        var ERRORS = [];
+        window.onerror = function(msg, src, lineno, col, error) {
+            ERRORS.push(msg + " at " + src + ":" + lineno + ":" + col);
+            document.body.innerHTML = "<h1>ERRORS: " + JSON.stringify(ERRORS) + "</h1>";
+        };
+        window.addEventListener('unhandledrejection', function(event) {
+            ERRORS.push("Promise Rejection: " + event.reason);
+            document.body.innerHTML = "<h1>ERRORS: " + JSON.stringify(ERRORS) + "</h1>";
+        });
+    </script>
+    <script src="js/admin.js"></script>
+    <script src="js/supabaseSync.js"></script>
+    <script src="js/game.js"></script>
+</head>
+<body><h1>NO ERROR YET</h1>
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        try {
+            if (window.renderAllGameViews) window.renderAllGameViews();
+            if (window.renderBaseBuilderView) window.renderBaseBuilderView();
+            if (window.renderBingoView) window.renderBingoView();
+            if (window.renderActivityTable) window.renderActivityTable();
+        } catch(e) {
+            ERRORS.push("RUNTIME: " + e.toString() + "\n" + e.stack);
+            document.body.innerHTML = "<h1>ERRORS: " + JSON.stringify(ERRORS) + "</h1>";
+        }
+    });
+</script>
+</body>
+</html>

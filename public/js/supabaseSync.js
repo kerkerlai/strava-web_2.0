@@ -84,7 +84,7 @@ function calculateLiveClassicStats(state) {
       duration: 0,
       calories: 0,
       trimp: 0,
-      zone2: 0,
+      zone2: 0, elevation: 0,
       gapSum: 0,
       maxGap: 0,
       suffer: 0,
@@ -98,6 +98,7 @@ function calculateLiveClassicStats(state) {
       h.workouts += 1;
       h.duration += (a.duration || 0);
       h.calories += (a.calories || 0);
+      h.elevation += (a.elevation || 0);
       h.trimp += (a.trimp || 0);
       if (a.isZone2) h.zone2 += 1;
       h.gapSum += (a.gap || 0);
@@ -253,7 +254,7 @@ function calculateLiveRPGStats(state) {
       duration: 0,
       calories: 0,
       trimp: 0,
-      zone2: 0,
+      zone2: 0, elevation: 0,
       gapSum: 0,
       maxGap: 0,
       suffer: 0,
@@ -267,6 +268,7 @@ function calculateLiveRPGStats(state) {
       h.workouts += 1;
       h.duration += (a.duration || 0);
       h.calories += (a.calories || 0);
+      h.elevation += (a.elevation || 0);
       h.trimp += (a.trimp || 0);
       if (a.isZone2) h.zone2 += 1;
       h.gapSum += (a.gap || 0);
@@ -550,6 +552,7 @@ async function syncFromDatabase() {
         totalDuration: inSeasonActs.reduce((s, a) => s + (a.duration || 0), 0),
         totalCalories: inSeasonActs.reduce((s, a) => s + (a.calories || 0), 0),
         totalTrimp: inSeasonActs.reduce((s, a) => s + (a.trimp || 0), 0),
+        totalElevation: inSeasonActs.reduce((s, a) => s + (a.elevation || 0), 0),
         zone2Count: inSeasonActs.filter(a => a.isZone2).length
       };
     });

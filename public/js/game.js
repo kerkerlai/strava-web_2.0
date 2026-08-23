@@ -6,6 +6,20 @@
  * 通用功能：冒險者戰情室 (Data Viewer) & 過往英雄史 (Chronicles)
  */
 
+// -------------------------------------------------------------
+// AVATAR HELPER
+// -------------------------------------------------------------
+function getHeroAvatar(name) {
+  const h = window.gameState?.heroes?.find(hx => hx.name === name);
+  return h?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${name}`;
+}
+function renderHeroTag(name, extraClasses = "px-2 py-1 rounded-lg bg-slate-900 border border-slate-700") {
+  return `<span class="cursor-pointer hover:bg-slate-800 transition inline-flex items-center space-x-1.5 ${extraClasses}" onclick="openHeroDetailModal('${name}')">
+            <img src="${getHeroAvatar(name)}" class="w-4 h-4 rounded-full object-cover bg-slate-800">
+            <span class="font-bold text-white text-xs">${name}</span>
+          </span>`;
+}
+
 let gameState = null;
 let heroStatsList = [];
 let currentMainTab = 'classic';
@@ -2979,6 +2993,22 @@ function renderBingoView() {
                <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-blue-500/50 transition">
                   <div class="flex items-center space-x-1.5 w-full overflow-hidden"><span class="text-slate-500 font-bold mr-1">${i+1}.</span>${renderHeroTag(h.name, "bg-transparent border-0 p-0 text-[11px] font-bold w-full justify-start truncate")}</div>
                   <span class="text-blue-400 font-bold font-mono">${Math.round(h.res).toLocaleString()}</span>
+               </div>
+             `).join('')}
+           </div>
+        </div>
+
+        
+        <!-- Elevation 貢獻 -->
+        <div class="bg-slate-900/60 p-4 border border-slate-800 rounded-2xl">
+           <h4 class="text-xs font-bold text-teal-400 mb-2">🏔️ 征服巔峰 <span class="text-[9px] text-slate-500 ml-1">累積爬升 (Elevation)</span></h4>
+           <div class="space-y-2">
+             ${(gameState?.heroStats || []).map(h => ({
+                ...h, res: (h.totalElevation || 0)
+             })).sort((a,b)=>b.res-a.res).slice(0, 3).map((h, i) => `
+               <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-teal-500/50 transition">
+                  <div class="flex items-center space-x-1.5 w-full overflow-hidden"><span class="text-slate-500 font-bold mr-1">${i+1}.</span>${renderHeroTag(h.name, "bg-transparent border-0 p-0 text-[11px] font-bold w-full justify-start truncate")}</div>
+                  <span class="text-teal-400 font-bold font-mono">${Math.round(h.res).toLocaleString()} m</span>
                </div>
              `).join('')}
            </div>

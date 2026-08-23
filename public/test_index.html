@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script>
+window.onerror = function(msg, url, lno, col, e) {
+    document.body.innerHTML += "<h1 class='err'>ERROR: " + msg + " at " + lno + "</h1>";
+};
+const originalConsoleError = console.error;
+console.error = function() {
+    originalConsoleError.apply(console, arguments);
+    document.body.innerHTML += "<h1 class='err'>CONSOLE.ERROR: " + Array.from(arguments).join(" ") + "</h1>";
+};
+</script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/game.js"></script>
+<script src="js/supabaseSync.js"></script>
+</head>
+<body>
+<div id="hero-kpi-cards"></div>
+<div id="bingo-container"></div>
+<table id="viewer-activities-table"><tbody id="viewer-activities-tbody"></tbody></table>
+<div id="modal-hero-profile-content"></div>
+</body>
+</html>

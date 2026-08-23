@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script>
+        window.onerror = function(msg, src, lno, col, err) {
+            document.body.innerHTML += "<h1>ERROR: " + msg + " at " + lno + ":" + col + "</h1>";
+            console.error("TOP LEVEL ERROR:", msg, lno, col);
+        };
+    </script>
+    <script src="js/game.js"></script>
+</head>
+<body></body>
+</html>
