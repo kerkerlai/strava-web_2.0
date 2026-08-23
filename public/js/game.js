@@ -1275,23 +1275,106 @@ function loadHeroViewerData() {
           <span class="text-xs font-bold text-purple-300 block truncate mt-1">${cls.badge} ${cls.name} (${cls.passiveName})</span>
         </div>
       `;
-    } else {
+    } else if (activeMode === "world_boss") {
       kpiContainer.innerHTML = `
         <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
-          <span class="text-[11px] text-slate-400 block">⚔️ 當前賽季對魔王總傷害</span>
+          <span class="text-[11px] text-slate-400 block">⚔️ 當前賽季對王總傷害</span>
           <span class="text-lg font-black font-rpg text-amber-400">${totalDmg.toLocaleString()}</span>
         </div>
         <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
-          <span class="text-[11px] text-slate-400 block">⏱️ 總討伐時長</span>
+          <span class="text-[11px] text-slate-400 block">🔥 魔法攻擊 (TRIMP)</span>
+          <span class="text-lg font-black font-rpg text-blue-400">${Math.round(heroStat.totalTrimp || 0).toLocaleString()}</span>
+        </div>
+        <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+          <span class="text-[11px] text-slate-400 block">🗡️ 物理普攻 (Calories)</span>
+          <span class="text-lg font-black font-rpg text-rose-400">${Math.round(heroStat.totalCalories || 0).toLocaleString()}</span>
+        </div>
+        <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+          <span class="text-[11px] text-slate-400 block">💥 物理狂化 (MaxGap)</span>
+          <span class="text-lg font-black font-rpg text-purple-400">${heroStat.maxGap || 0}</span>
+        </div>
+      `;
+    } else if (activeMode === "faction_war") {
+      kpiContainer.innerHTML = `
+        <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+          <span class="text-[11px] text-slate-400 block">🔥 攻城總傷害</span>
+          <span class="text-lg font-black font-rpg text-rose-400">${Math.round((heroStat.totalTrimp || 0) * 10 + (heroStat.maxGap || 0) * 100).toLocaleString()}</span>
+        </div>
+        <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+          <span class="text-[11px] text-slate-400 block">🛠️ 城牆總修復量</span>
+          <span class="text-lg font-black font-rpg text-cyan-400">${Math.round((heroStat.totalCalories || 0) + (heroStat.zone2Count || 0) * 5000).toLocaleString()}</span>
+        </div>
+        <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+          <span class="text-[11px] text-slate-400 block">🚀 無氧引擎 (TRIMP)</span>
+          <span class="text-lg font-black font-rpg text-rose-300">${Math.round(heroStat.totalTrimp || 0).toLocaleString()}</span>
+        </div>
+        <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+          <span class="text-[11px] text-slate-400 block">🟢 有氧大師 (Zone2)</span>
+          <span class="text-lg font-black font-rpg text-cyan-300">${heroStat.zone2Count || 0} 次</span>
+        </div>
+      `;
+    } else if (activeMode === "survival") {
+      const decayPerDay = gameState?.survival?.decayPerDay || 500;
+      const startObj = new Date(gameState?.seasonStart || "2026/08/12");
+      const daysDiff = Math.max(1, Math.floor((new Date() - startObj) / (1000 * 60 * 60 * 24)));
+      const maxHp = gameState?.survival?.maxHp || 10000;
+      const currentHp = Math.floor(maxHp - (daysDiff * decayPerDay) + (heroStat.totalCalories || 0) + (heroStat.totalTrimp || 0) * 1.5);
+      const isDead = currentHp <= 0;
+      
+      kpiContainer.innerHTML = `
+        <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+          <span class="text-[11px] ${isDead ? 'text-red-500' : 'text-emerald-400'} block">❤️ 當前生存值</span>
+          <span class="text-lg font-black font-rpg ${isDead ? 'text-slate-600' : 'text-amber-400'}">${Math.max(0, currentHp).toLocaleString()}</span>
+        </div>
+        <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+          <span class="text-[11px] text-slate-400 block">🍖 狩獵總熱量 (基礎HP)</span>
+          <span class="text-lg font-black font-rpg text-rose-400">+${Math.round(heroStat.totalCalories || 0).toLocaleString()}</span>
+        </div>
+        <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+          <span class="text-[11px] text-slate-400 block">🎒 搜刮總物資 (外加HP)</span>
+          <span class="text-lg font-black font-rpg text-blue-400">+${Math.round((heroStat.totalTrimp || 0) * 1.5).toLocaleString()}</span>
+        </div>
+        <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+          <span class="text-[11px] text-slate-400 block">⏱️ 荒野堅持天數</span>
+          <span class="text-lg font-black font-rpg text-cyan-400">${heroStat.validWorkouts || 0} 天</span>
+        </div>
+      `;
+    } else if (activeMode === "base_builder") {
+      kpiContainer.innerHTML = `
+        <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+          <span class="text-[11px] text-slate-400 block">🌳 提供木材</span>
+          <span class="text-lg font-black font-rpg text-emerald-400">${Math.round(heroStat.totalCalories || 0).toLocaleString()}</span>
+        </div>
+        <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+          <span class="text-[11px] text-slate-400 block">⚙️ 煉製鋼鐵</span>
+          <span class="text-lg font-black font-rpg text-blue-400">${Math.round(heroStat.totalTrimp || 0).toLocaleString()}</span>
+        </div>
+        <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+          <span class="text-[11px] text-slate-400 block">🔮 魔法神石</span>
+          <span class="text-lg font-black font-rpg text-purple-400">${Math.round((heroStat.maxGap || 0) * 10 + (heroStat.zone2Count || 0) * 50).toLocaleString()}</span>
+        </div>
+        <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+          <span class="text-[11px] text-slate-400 block">⏱️ 工地總時長</span>
           <span class="text-lg font-black font-rpg text-cyan-400">${Math.round(totalDur)} 分鐘</span>
         </div>
+      `;
+    } else if (activeMode === "bingo") {
+      kpiContainer.innerHTML = `
         <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
-          <span class="text-[11px] text-slate-400 block">🗡️ 物理普攻總和</span>
-          <span class="text-lg font-black font-rpg text-rose-400">${(heroStat.physDmg || Math.round(totalCal)).toLocaleString()}</span>
+          <span class="text-[11px] text-slate-400 block">💥 心跳超載 (TRIMP)</span>
+          <span class="text-lg font-black font-rpg text-blue-400">${Math.round(heroStat.totalTrimp || 0).toLocaleString()}</span>
         </div>
         <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
-          <span class="text-[11px] text-slate-400 block">💥 最高落差 (爆擊輸出)</span>
-          <span class="text-lg font-black font-rpg text-purple-400">${heroStat.maxGap || 0} (${(heroStat.critDmg || 0).toLocaleString()} 點)</span>
+          <span class="text-[11px] text-slate-400 block">🔥 大熱量引擎</span>
+          <span class="text-lg font-black font-rpg text-rose-400">${Math.round(heroStat.totalCalories || 0).toLocaleString()}</span>
+        </div>
+        <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+          <span class="text-[11px] text-slate-400 block">🟢 完美 Zone 2</span>
+          <span class="text-lg font-black font-rpg text-emerald-400">${heroStat.zone2Count || 0} 次</span>
+        </div>
+        <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+          <span class="text-[11px] text-slate-400 block">🦍 限界突破 (MaxGap)</span>
+          <span class="text-lg font-black font-rpg text-purple-400">${heroStat.maxGap || 0}</span>
         </div>
       `;
     }
@@ -2689,14 +2772,14 @@ function renderBingoView() {
   const c9 = true; // Free space
 
   const grid = [
-     { key: "長征先鋒", desc: "全服累計 10 次超過 1 小時的訓練", ok: c1 },
-     { key: "燃脂大師", desc: "解鎖 20 次完美的 Zone 2 綠色指標", ok: c2 },
-     { key: "心跳超載", desc: "全服累積引擎衝力 TRIMP 破 3,000", ok: c3 },
-     { key: "爆發限界", desc: "出現 5 次落差大於 70 的魔鬼心率訓練", ok: c4 },
-     { key: "紀律部隊", desc: "伺服器至少有 3 人達成 10 次出勤", ok: c5 },
-     { key: "脂肪燃燒者", desc: "全服大熱量！總計燃燒 50,000 卡路里", ok: c6 },
-     { key: "死神擦肩", desc: "尋找 2 名極限 MaxGap 突破 80 的勇者", ok: c7 },
-     { key: "真金不怕火", desc: "賽季手動打卡(無穿戴數據) 次數控制在 5 次內", ok: c8 },
+     { key: "長征先鋒", desc: `全服累計 ${Math.ceil(10 * m)} 次超過 1 小時的訓練`, ok: c1 },
+     { key: "燃脂大師", desc: `解鎖 ${Math.ceil(20 * m)} 次完美的 Zone 2 綠色指標`, ok: c2 },
+     { key: "心跳超載", desc: `全服累積引擎衝力 TRIMP 破 ${Math.ceil(3000 * m).toLocaleString()}`, ok: c3 },
+     { key: "爆發限界", desc: `出現 ${Math.ceil(5 * m)} 次落差大於 70 的魔鬼心率訓練`, ok: c4 },
+     { key: "紀律部隊", desc: `伺服器至少有 ${Math.max(1, Math.ceil(3 * m))} 人達成 10 次出勤`, ok: c5 },
+     { key: "脂肪燃燒者", desc: `全服大熱量！總計燃燒 ${(50000 * m).toLocaleString()} 卡路里`, ok: c6 },
+     { key: "死神擦肩", desc: `尋找 ${Math.max(1, Math.ceil(2 * m))} 名極限 MaxGap 突破 80 的勇者`, ok: c7 },
+     { key: "真金不怕火", desc: `賽季手動打卡(無穿戴數據) 次數控制在 ${Math.max(1, Math.floor(5 / m))} 次內`, ok: c8 },
      { key: "冒險起點", desc: "中央免費贈送的補給空間", ok: c9 },
   ];
 
@@ -2727,25 +2810,89 @@ function renderBingoView() {
 
     <!-- 戰神拼圖貢獻 MVP -->
     <div class="bg-slate-900/80 border border-slate-800 rounded-3xl p-5 mt-6">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4 mt-8">
         <h3 class="text-sm font-bold text-white flex items-center space-x-2">
-          <i data-lucide="award" class="w-4 h-4 text-fuchsia-400"></i>
-          <span>🧩 拼圖解謎 MVP (活躍貢獻榜)</span>
-          <span class="text-[9px] text-slate-400 ml-auto font-mono bg-slate-800 px-2 py-0.5 rounded">計分公式: Calories + TRIMP×10 + MaxGap×50 + Zone2×1000</span>
+          <i data-lucide="users" class="w-5 h-5 text-fuchsia-400"></i>
+          <span>🏆 戰神拼圖 (各板塊領跑者)</span>
         </h3>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-           ${(gameState?.heroStats || []).map(h => ({
-              ...h, res: (h.totalCalories || 0) + (h.totalTrimp || 0)*10 + (h.maxGap || 0)*50 + (h.zone2Count || 0)*1000
-           })).sort((a,b)=>b.res-a.res).slice(0, 9).map((h, i) => `
-             <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-3 text-xs rounded-xl border border-slate-800 flex items-center justify-between cursor-pointer hover:border-fuchsia-500/50 transition">
-                <div class="flex items-center space-x-2">
-                    <span class="font-bold text-slate-500 w-4">${i+1}.</span>
-                    <span class="font-bold text-white">${h.avatar ? `<img src="${h.avatar}" class="inline-block w-6 h-6 rounded-md mr-1 object-cover">` : ''}${h.name}</span>
-                </div>
-                <span class="text-fuchsia-400 font-bold font-mono">MVP Pts: ${Math.round(h.res).toLocaleString()}</span>
-             </div>
-           `).join('')}
+        
+        <!-- 卡路里貢獻 -->
+        <div class="bg-slate-900/60 p-4 border border-slate-800 rounded-2xl">
+           <h4 class="text-xs font-bold text-rose-400 mb-2">🔥 脂肪燃燒者 <span class="text-[9px] text-slate-500 ml-1">總卡路里</span></h4>
+           <div class="space-y-2">
+             ${(gameState?.heroStats || []).map(h => ({
+                ...h, res: (h.totalCalories || 0)
+             })).sort((a,b)=>b.res-a.res).slice(0, 3).map((h, i) => `
+               <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-rose-500/50 transition">
+                  <span class="text-white font-bold"><span class="text-slate-500 mr-1">${i+1}.</span> ${h.name}</span>
+                  <span class="text-rose-400 font-bold font-mono">${Math.round(h.res).toLocaleString()} kcal</span>
+               </div>
+             `).join('')}
+           </div>
+        </div>
+
+        <!-- 訓練時長貢獻 (這需要在 hero 活動算, 但簡單點用出勤次數替代或時長) -->
+        <div class="bg-slate-900/60 p-4 border border-slate-800 rounded-2xl">
+           <h4 class="text-xs font-bold text-amber-400 mb-2">⌚ 紀律部隊 <span class="text-[9px] text-slate-500 ml-1">總出勤次數</span></h4>
+           <div class="space-y-2">
+             ${(gameState?.heroStats || []).map(h => ({
+                ...h, res: (h.validWorkouts || 0)
+             })).sort((a,b)=>b.res-a.res).slice(0, 3).map((h, i) => `
+               <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-amber-500/50 transition">
+                  <span class="text-white font-bold"><span class="text-slate-500 mr-1">${i+1}.</span> ${h.name}</span>
+                  <span class="text-amber-400 font-bold font-mono">${Math.round(h.res).toLocaleString()} 次</span>
+               </div>
+             `).join('')}
+           </div>
+        </div>
+
+        <!-- Zone2 貢獻 -->
+        <div class="bg-slate-900/60 p-4 border border-slate-800 rounded-2xl">
+           <h4 class="text-xs font-bold text-emerald-400 mb-2">🟢 燃脂大師 <span class="text-[9px] text-slate-500 ml-1">Zone 2 次數</span></h4>
+           <div class="space-y-2">
+             ${(gameState?.heroStats || []).map(h => ({
+                ...h, res: (h.zone2Count || 0)
+             })).sort((a,b)=>b.res-a.res).slice(0, 3).map((h, i) => `
+               <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-emerald-500/50 transition">
+                  <span class="text-white font-bold"><span class="text-slate-500 mr-1">${i+1}.</span> ${h.name}</span>
+                  <span class="text-emerald-400 font-bold font-mono">${Math.round(h.res).toLocaleString()} 次</span>
+               </div>
+             `).join('')}
+           </div>
+        </div>
+
+        <!-- TRIMP 貢獻 -->
+        <div class="bg-slate-900/60 p-4 border border-slate-800 rounded-2xl">
+           <h4 class="text-xs font-bold text-blue-400 mb-2">⚙️ 心跳超載 <span class="text-[9px] text-slate-500 ml-1">累積衝力 TRIMP</span></h4>
+           <div class="space-y-2">
+             ${(gameState?.heroStats || []).map(h => ({
+                ...h, res: (h.totalTrimp || 0)
+             })).sort((a,b)=>b.res-a.res).slice(0, 3).map((h, i) => `
+               <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-blue-500/50 transition">
+                  <span class="text-white font-bold"><span class="text-slate-500 mr-1">${i+1}.</span> ${h.name}</span>
+                  <span class="text-blue-400 font-bold font-mono">${Math.round(h.res).toLocaleString()}</span>
+               </div>
+             `).join('')}
+           </div>
+        </div>
+
+        <!-- MaxGap 貢獻 -->
+        <div class="bg-slate-900/60 p-4 border border-slate-800 rounded-2xl">
+           <h4 class="text-xs font-bold text-purple-400 mb-2">限界突破 <span class="text-[9px] text-slate-500 ml-1">最高落差 MaxGap</span></h4>
+           <div class="space-y-2">
+             ${(gameState?.heroStats || []).map(h => ({
+                ...h, res: (h.maxGap || 0)
+             })).sort((a,b)=>b.res-a.res).slice(0, 3).map((h, i) => `
+               <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-purple-500/50 transition">
+                  <span class="text-white font-bold"><span class="text-slate-500 mr-1">${i+1}.</span> ${h.name}</span>
+                  <span class="text-purple-400 font-bold font-mono">${Math.round(h.res).toLocaleString()}</span>
+               </div>
+             `).join('')}
+           </div>
+        </div>
+
       </div>
     </div>
   `;
