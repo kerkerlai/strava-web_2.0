@@ -286,6 +286,14 @@ function onExpansionModeChanged() {
   if (pClassic) pClassic.classList.toggle('hidden', mode !== 'classic');
   if (pRpg) pRpg.classList.toggle('hidden', mode !== 'rpg_talent');
   if (pBoss) pBoss.classList.toggle('hidden', mode !== 'world_boss');
+  const pFaction = document.getElementById('panel-settings-faction');
+  const pSurvival = document.getElementById('panel-settings-survival');
+  const pBase = document.getElementById('panel-settings-base');
+  const pBingo = document.getElementById('panel-settings-bingo');
+  if (pFaction) pFaction.classList.toggle('hidden', mode !== 'faction_war');
+  if (pSurvival) pSurvival.classList.toggle('hidden', mode !== 'survival');
+  if (pBase) pBase.classList.toggle('hidden', mode !== 'base_builder');
+  if (pBingo) pBingo.classList.toggle('hidden', mode !== 'bingo');
 
   // 3. Dynamic Adjustments to Manual Check-in Form
   const formTitle = document.getElementById('manual-form-title');
@@ -1403,4 +1411,62 @@ function downloadCrawlerConfigJSON() {
   downloadAnchor.click();
   downloadAnchor.remove();
   showAdminToast("✅ 已下載最新的 crawler_config.json！");
+}
+
+async function saveFactionSettings() {
+  const f1 = document.getElementById('cfg-faction1-name').value;
+  const f2 = document.getElementById('cfg-faction2-name').value;
+  const hp = parseInt(document.getElementById('cfg-faction-basehp').value) || 500000;
+  
+  if (!gameState) gameState = {};
+  gameState.faction = { f1Name: f1, f2Name: f2, baseHp: hp };
+  
+  try {
+    await window.supabase.insert("game_config", { key: "faction_config", value: gameState.faction });
+    alert("🎉 雙城激戰參數已儲存");
+  } catch (e) {
+    alert("儲存失敗: " + e.message);
+  }
+}
+
+async function saveSurvivalSettings() {
+  const maxHp = parseInt(document.getElementById('cfg-survival-maxhp').value) || 10000;
+  const decay = parseInt(document.getElementById('cfg-survival-decay').value) || 500;
+  if (!gameState) gameState = {};
+  gameState.survival = { maxHp, decayPerDay: decay };
+  
+  try {
+    await window.supabase.insert("game_config", { key: "survival_config", value: gameState.survival });
+    alert("🎉 飢餓法則參數已儲存");
+  } catch (e) {
+    alert("儲存失敗: " + e.message);
+  }
+}
+
+async function saveBaseSettings() {
+  const wood = parseInt(document.getElementById('cfg-base-wood').value) || 50000;
+  const steel = parseInt(document.getElementById('cfg-base-steel').value) || 50000;
+  const mana = parseInt(document.getElementById('cfg-base-mana').value) || 50000;
+  if (!gameState) gameState = {};
+  gameState.base = { woodTarget: wood, steelTarget: steel, manaTarget: mana };
+  
+  try {
+    await window.supabase.insert("game_config", { key: "base_config", value: gameState.base });
+    alert("🎉 鋼鐵要塞參數已儲存");
+  } catch (e) {
+    alert("儲存失敗: " + e.message);
+  }
+}
+
+async function saveBingoSettings() {
+  const mult = parseFloat(document.getElementById('cfg-bingo-multiplier').value) || 1.0;
+  if (!gameState) gameState = {};
+  gameState.bingo = { multiplier: mult };
+  
+  try {
+    await window.supabase.insert("game_config", { key: "bingo_config", value: gameState.bingo });
+    alert("🎉 戰神拼圖參數已儲存");
+  } catch (e) {
+    alert("儲存失敗: " + e.message);
+  }
 }

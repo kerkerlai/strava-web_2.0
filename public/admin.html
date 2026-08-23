@@ -353,6 +353,76 @@
           </div>
         </div>
 
+        <!-- ============================================== -->
+        <!-- Expansion 4: Faction War Config                -->
+        <!-- ============================================== -->
+        <div id="panel-settings-faction" class="hidden bg-slate-900/80 border border-emerald-500/40 rounded-3xl p-6 shadow-xl space-y-4">
+          <div class="border-b border-slate-800 pb-3 flex items-center space-x-2">
+            <i data-lucide="swords" class="w-5 h-5 text-emerald-400"></i>
+            <h2 class="text-base font-bold text-white">⚔️ 資料片四 • 雙城激戰設定</h2>
+          </div>
+          <div class="space-y-3 text-xs">
+            <label class="font-bold text-slate-300 block mb-1">🏰 守護陣營名稱</label>
+            <input type="text" id="cfg-faction1-name" value="🟢 均衡聯盟" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-emerald-400 font-bold outline-none">
+            <label class="font-bold text-slate-300 block mb-1">🏰 狂怒陣營名稱</label>
+            <input type="text" id="cfg-faction2-name" value="🔴 狂怒部落" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-rose-400 font-bold outline-none">
+            <label class="font-bold text-slate-300 block mb-1">❤️ 主城初始血量 (Base HP)</label>
+            <input type="number" id="cfg-faction-basehp" value="500000" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono outline-none">
+            <button onclick="saveFactionSettings()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 font-bold rounded-xl text-xs transition">儲存陣營參數</button>
+          </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- Expansion 5: Survival Config                   -->
+        <!-- ============================================== -->
+        <div id="panel-settings-survival" class="hidden bg-slate-900/80 border border-amber-500/40 rounded-3xl p-6 shadow-xl space-y-4">
+          <div class="border-b border-slate-800 pb-3 flex items-center space-x-2">
+            <i data-lucide="skull" class="w-5 h-5 text-amber-500"></i>
+            <h2 class="text-base font-bold text-white">☠️ 資料片五 • 飢餓法則設定</h2>
+          </div>
+          <div class="space-y-3 text-xs">
+            <label class="font-bold text-slate-300 block mb-1">❤️ 初始生存值 (Max HP)</label>
+            <input type="number" id="cfg-survival-maxhp" value="10000" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono outline-none">
+            <label class="font-bold text-slate-300 block mb-1">每天衰減生命 (Decay/Day)</label>
+            <input type="number" id="cfg-survival-decay" value="500" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono outline-none">
+            <button onclick="saveSurvivalSettings()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-500 font-bold rounded-xl text-xs transition">儲存生存參數</button>
+          </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- Expansion 6: Base Builder Config               -->
+        <!-- ============================================== -->
+        <div id="panel-settings-base" class="hidden bg-slate-900/80 border border-blue-500/40 rounded-3xl p-6 shadow-xl space-y-4">
+          <div class="border-b border-slate-800 pb-3 flex items-center space-x-2">
+            <i data-lucide="castle" class="w-5 h-5 text-blue-400"></i>
+            <h2 class="text-base font-bold text-white">🏰 資料片六 • 鋼鐵要塞設定</h2>
+          </div>
+          <div class="space-y-3 text-xs">
+            <label class="font-bold text-slate-300 block mb-1">🌳 木材升級需求</label>
+            <input type="number" id="cfg-base-wood" value="50000" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-emerald-400 font-mono outline-none">
+            <label class="font-bold text-slate-300 block mb-1">⚙️ 鋼鐵升級需求</label>
+            <input type="number" id="cfg-base-steel" value="50000" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-blue-400 font-mono outline-none">
+            <label class="font-bold text-slate-300 block mb-1">🔮 魔法原石升級需求</label>
+            <input type="number" id="cfg-base-mana" value="50000" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-purple-400 font-mono outline-none">
+            <button onclick="saveBaseSettings()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-blue-400 font-bold rounded-xl text-xs transition">儲存要塞參數</button>
+          </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- Expansion 7: Bingo Config                      -->
+        <!-- ============================================== -->
+        <div id="panel-settings-bingo" class="hidden bg-slate-900/80 border border-fuchsia-500/40 rounded-3xl p-6 shadow-xl space-y-4">
+          <div class="border-b border-slate-800 pb-3 flex items-center space-x-2">
+            <i data-lucide="grid" class="w-5 h-5 text-fuchsia-400"></i>
+            <h2 class="text-base font-bold text-white">🧩 資料片七 • 戰神拼圖</h2>
+          </div>
+          <div class="space-y-3 text-xs">
+            <label class="font-bold text-slate-300 block mb-1">任務難度倍率</label>
+            <input type="number" step="0.1" id="cfg-bingo-multiplier" value="1.0" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono outline-none">
+            <button onclick="saveBingoSettings()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-fuchsia-400 font-bold rounded-xl text-xs transition">儲存拼圖參數</button>
+          </div>
+        </div>
+
       </div>
 
     </div>

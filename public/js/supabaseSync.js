@@ -373,6 +373,10 @@ async function syncFromDatabase() {
     const bossConfig = configMap.boss_config || gameState?.boss || {};
     const classicConfig = configMap.classic_config || gameState?.classic || {};
     const rpgConfig = configMap.rpg_config || gameState?.rpg || {};
+    const factionConfig = configMap.faction_config || gameState?.faction || {};
+    const survivalConfig = configMap.survival_config || gameState?.survival || {};
+    const baseConfig = configMap.base_config || gameState?.base || {};
+    const bingoConfig = configMap.bingo_config || gameState?.bingo || {};
     const snapshots = configMap.snapshots || gameState?.snapshots || [];
 
     // Parse Active Season Dates

@@ -2334,8 +2334,8 @@ function renderFactionWarView() {
   const guildList = gameState?.guilds || [];
   
   // 假設兩大陣營：依據公會分兩組 (如果公會少於2，手動切半)
-  let faction1 = { name: "🟢 均衡聯盟", hp: 500000, dmg: 0, repair: 0, guilds: [] };
-  let faction2 = { name: "🔴 狂怒部落", hp: 500000, dmg: 0, repair: 0, guilds: [] };
+  let faction1 = { name: gameState?.faction?.f1Name || "🟢 均衡聯盟", hp: gameState?.faction?.baseHp || 500000, dmg: 0, repair: 0, guilds: [] };
+  let faction2 = { name: gameState?.faction?.f2Name || "🔴 狂怒部落", hp: gameState?.faction?.baseHp || 500000, dmg: 0, repair: 0, guilds: [] };
   
   guildList.forEach((g, idx) => {
       const isF1 = idx % 2 === 0;
@@ -2421,13 +2421,13 @@ function renderSurvivalView() {
   const today = new Date();
   const startObj = new Date(gameState?.seasonStart || "2026/08/12");
   const daysDiff = Math.max(1, Math.floor((today - startObj) / (1000 * 60 * 60 * 24)));
-  const decayPerDay = 500;
+  const decayPerDay = gameState?.survival?.decayPerDay || 500;
   const currentPenalty = daysDiff * decayPerDay;
 
   const survivingHeroes = heroList.map(h => {
       const food = (h.totalCalories || 0); // Calories -> HP regen
       const scavenge = (h.totalTrimp || 0) * 1.5; // Trimp -> bonus scavenge
-      const maxHp = 10000;
+      const maxHp = gameState?.survival?.maxHp || 10000;
       const currentHp = Math.floor(maxHp - currentPenalty + food + scavenge);
       const isDead = currentHp <= 0;
       return { ...h, currentHp, isDead, food, scavenge };
@@ -2550,16 +2550,17 @@ function renderBingoView() {
   if (!container) return;
 
   const acts = (gameState?.activities || []).filter(a => a.inSeason && !a.isExcluded);
+  const m = gameState?.bingo?.multiplier || 1.0;
   
   // 9 Check conditions
-  const c1 = acts.filter(a => a.duration >= 60).length >= 10;
-  const c2 = acts.filter(a => a.isZone2).length >= 20;
-  const c3 = acts.reduce((s, a) => s + (a.trimp || 0), 0) >= 3000;
-  const c4 = acts.filter(a => a.gapVal >= 70).length >= 5;
-  const c5 = (gameState?.heroStats || []).filter(h => (h.validWorkouts || 0) >= 10).length >= 3;
-  const c6 = acts.reduce((s, a) => s + (a.calories || 0), 0) >= 50000;
-  const c7 = (gameState?.heroStats || []).filter(h => (h.maxGap || 0) >= 80).length >= 2;
-  const c8 = acts.filter(a => a.isManual).length <= 5; // Reward for auto-sync hardware
+  const c1 = acts.filter(a => a.duration >= 60).length >= Math.ceil(10 * m);
+  const c2 = acts.filter(a => a.isZone2).length >= Math.ceil(20 * m);
+  const c3 = acts.reduce((s, a) => s + (a.trimp || 0), 0) >= 3000 * m;
+  const c4 = acts.filter(a => a.gapVal >= 70).length >= Math.ceil(5 * m);
+  const c5 = (gameState?.heroStats || []).filter(h => (h.validWorkouts || 0) >= 10).length >= Math.max(1, Math.ceil(3 * m));
+  const c6 = acts.reduce((s, a) => s + (a.calories || 0), 0) >= 50000 * m;
+  const c7 = (gameState?.heroStats || []).filter(h => (h.maxGap || 0) >= 80).length >= Math.max(1, Math.ceil(2 * m));
+  const c8 = acts.filter(a => a.isManual).length <= Math.max(1, Math.floor(5 / m)); // Reward for auto-sync hardware
   const c9 = true; // Free space
 
   const grid = [
