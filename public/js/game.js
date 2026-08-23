@@ -1478,20 +1478,26 @@ function openHeroDetailModal(heroName) {
   const totalDur = inSeasonActs.reduce((acc, a) => acc + (a.duration || 0), 0);
   const totalCal = inSeasonActs.reduce((acc, a) => acc + (a.calories || 0), 0);
 
-  title.innerHTML = `
-    <div class="flex items-center space-x-2 relative group w-full">
-      <div class="w-12 h-12 rounded-lg bg-slate-800 overflow-hidden border border-slate-700 flex-shrink-0 relative">
-        <img src="${hero.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${hero.name}`}" class="w-full h-full object-cover">
-        <label class="absolute inset-0 bg-black/60 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-[10px] text-white">
-          <i data-lucide="upload" class="w-4 h-4 mb-0.5"></i>
-          <span>更換</span>
-          <input type="file" accept="image/jpeg, image/png, image/webp" class="hidden" onchange="handleAvatarUpload('${hero.name}', this)" />
-        </label>
+    title.innerHTML = `
+    <div class="flex items-center space-x-3 w-full">
+      <div class="w-14 h-14 rounded-lg bg-slate-800 overflow-hidden border-2 border-slate-700 flex-shrink-0 relative">
+        <img src="${hero.avatar || \`https://api.dicebear.com/7.x/bottts/svg?seed=${hero.name}\`}" class="w-full h-full object-cover">
       </div>
-      <div>
-        <span class="text-sm font-black text-white">${hero.name}</span>
-        <span class="text-[10px] text-amber-300 font-bold px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 ml-1">${hero.guild}</span>
-        ${(gameState?.activeMode === 'rpg_talent' || gameState?.activeMode === 'rpg' || (currentView === 'chronicles' && getAllSnapshots().find(s => s.id === selectedChronicle)?.type === 'rpg')) ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${cls.bg} ml-1">${cls.badge} ${cls.name}</span>` : ''}
+      <div class="flex-grow">
+        <div class="flex flex-wrap items-center justify-between w-full gap-2">
+           <div class="flex items-center flex-wrap gap-1">
+               <span class="font-bold text-white tracking-wide text-lg">${hero.name}</span>
+               <span class="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 text-[10px]">${hero.guild}</span>
+               ${(gameState?.activeMode === 'rpg_talent' || gameState?.activeMode === 'rpg' || (typeof currentView !== 'undefined' && currentView === 'chronicles' && getAllSnapshots().find(s => s.id === selectedChronicle)?.type === 'rpg')) ? \`<span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${cls.bg} ml-1">${cls.badge} ${cls.name}</span>\` : ''}
+           </div>
+           
+           <!-- 明確的上傳按鈕 -->
+           <label class="cursor-pointer flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 px-3 py-1.5 rounded-lg transition shadow-lg text-emerald-400">
+              <i data-lucide="image-plus" class="w-4 h-4"></i>
+              <span class="text-xs font-bold whitespace-nowrap">上傳大頭貼</span>
+              <input type="file" accept="image/jpeg, image/png, image/webp" class="hidden" onchange="handleAvatarUpload('${hero.name}', this)" />
+           </label>
+        </div>
       </div>
     </div>
   `;
@@ -2407,6 +2413,52 @@ function renderFactionWarView() {
       </div>
 
     </div>
+
+    <!-- 陣營英雄戰績板 -->
+    <div class="bg-slate-900/80 border border-slate-800 rounded-3xl p-5 mt-6">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+          <i data-lucide="swords" class="w-4 h-4 text-emerald-400"></i>
+          <span>🛡️ 陣營傭兵戰略貢獻榜</span>
+        </h3>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+           <h4 class="text-xs font-bold text-rose-400 mb-2">🔥 攻城毀滅者 (輸出排行)</h4>
+           <div class="space-y-2">
+             ${(gameState?.heroStats || []).map(h => ({
+                ...h, dmg: (h.totalTrimp || 0) * 10 + (h.maxGap || 0) * 100
+             })).sort((a,b)=>b.dmg-a.dmg).slice(0, 10).map((h, i) => `
+               <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between text-xs cursor-pointer hover:border-rose-500/50 transition">
+                  <div class="flex items-center space-x-2">
+                      <span class="font-bold text-slate-500 w-4">${i+1}.</span>
+                      <span class="font-bold text-white">${h.avatar ? `<img src="${h.avatar}" class="inline-block w-4 h-4 rounded-full mr-1 object-cover">` : ''}${h.name}</span>
+                      <span class="text-[9px] text-slate-500">${h.guild}</span>
+                  </div>
+                  <span class="font-rpg font-bold text-rose-400">${h.dmg.toLocaleString()}</span>
+               </div>
+             `).join('')}
+           </div>
+        </div>
+        <div>
+           <h4 class="text-xs font-bold text-cyan-400 mb-2">🛠️ 城牆守護者 (修復排行)</h4>
+           <div class="space-y-2">
+             ${(gameState?.heroStats || []).map(h => ({
+                ...h, rep: (h.zone2Count || 0) * 5000 + (h.totalCalories || 0)
+             })).sort((a,b)=>b.rep-a.rep).slice(0, 10).map((h, i) => `
+               <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between text-xs cursor-pointer hover:border-cyan-500/50 transition">
+                  <div class="flex items-center space-x-2">
+                      <span class="font-bold text-slate-500 w-4">${i+1}.</span>
+                      <span class="font-bold text-white">${h.avatar ? `<img src="${h.avatar}" class="inline-block w-4 h-4 rounded-full mr-1 object-cover">` : ''}${h.name}</span>
+                      <span class="text-[9px] text-slate-500">${h.guild}</span>
+                  </div>
+                  <span class="font-rpg font-bold text-cyan-400">+${h.rep.toLocaleString()}</span>
+               </div>
+             `).join('')}
+           </div>
+        </div>
+      </div>
+    </div>
   `;
 }
 
@@ -2446,7 +2498,7 @@ function renderSurvivalView() {
 
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       ${survivingHeroes.map((h, i) => `
-        <div class="bg-slate-900/80 p-4 border rounded-2xl ${h.isDead ? 'border-slate-800 opacity-50 grayscale' : 'border-amber-500/40 relative overflow-hidden hover:border-amber-400'}">
+        <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-900/80 p-4 border rounded-2xl cursor-pointer transition ${h.isDead ? 'border-slate-800 opacity-50 grayscale' : 'border-amber-500/40 relative overflow-hidden hover:border-amber-400'}">
             <div class="flex items-center space-x-3 mb-3">
                <div class="w-10 h-10 rounded-xl bg-slate-800 overflow-hidden border border-slate-700">
                   <img src="${h.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${h.name}`}" class="w-full h-full object-cover">
@@ -2462,7 +2514,7 @@ function renderSurvivalView() {
                <span class="text-amber-400 font-mono text-sm font-bold">${Math.max(0, h.currentHp).toLocaleString()}</span>
             </div>
             <div class="w-full h-1.5 ${h.isDead ? 'bg-slate-800' : 'bg-slate-900'} rounded-full overflow-hidden">
-               <div class="h-full bg-amber-500" style="width: ${h.isDead ? 0 : Math.min(100, Math.max(0, (h.currentHp/10000)*100))}%"></div>
+               <div class="h-full bg-amber-500" style="width: ${h.isDead ? 0 : Math.min(100, Math.max(0, (h.currentHp/maxHp)*100))}%"></div>
             </div>
             <div class="mt-3 pt-2 border-t border-slate-800 flex justify-between text-[9px] text-slate-500">
                <span>狩獵熱量: +${Math.floor(h.food).toLocaleString()}</span>
@@ -2539,6 +2591,57 @@ function renderBaseBuilderView() {
           </div>
        </div>
     </div>
+
+    <!-- 鋼鐵要塞貢獻榜 -->
+    <div class="bg-slate-900/80 border border-slate-800 rounded-3xl p-5 mt-6">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+          <i data-lucide="hammer" class="w-4 h-4 text-blue-400"></i>
+          <span>👷 要塞工程隊卓越傑出貢獻榜</span>
+        </h3>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div>
+           <h4 class="text-xs font-bold text-emerald-400 mb-2">🌳 頂級伐木工 (Wood)</h4>
+           <div class="space-y-2">
+             ${(gameState?.heroStats || []).map(h => ({
+                ...h, res: (h.totalCalories || 0)
+             })).sort((a,b)=>b.res-a.res).slice(0, 5).map((h, i) => `
+               <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-emerald-500/50 transition">
+                  <span class="text-white font-bold"><span class="text-slate-500 mr-2">${i+1}.</span>${h.name}</span>
+                  <span class="text-emerald-400 font-bold">${h.res.toLocaleString()}</span>
+               </div>
+             `).join('')}
+           </div>
+        </div>
+        <div>
+           <h4 class="text-xs font-bold text-blue-400 mb-2">⚙️ 鋼鐵礦工 (Steel)</h4>
+           <div class="space-y-2">
+             ${(gameState?.heroStats || []).map(h => ({
+                ...h, res: (h.totalTrimp || 0)
+             })).sort((a,b)=>b.res-a.res).slice(0, 5).map((h, i) => `
+               <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-blue-500/50 transition">
+                  <span class="text-white font-bold"><span class="text-slate-500 mr-2">${i+1}.</span>${h.name}</span>
+                  <span class="text-blue-400 font-bold">${Math.round(h.res).toLocaleString()}</span>
+               </div>
+             `).join('')}
+           </div>
+        </div>
+        <div>
+           <h4 class="text-xs font-bold text-purple-400 mb-2">🔮 魔法煉金術師 (Mana)</h4>
+           <div class="space-y-2">
+             ${(gameState?.heroStats || []).map(h => ({
+                ...h, res: ((h.maxGap || 0) * 10 + (h.zone2Count || 0) * 50)
+             })).sort((a,b)=>b.res-a.res).slice(0, 5).map((h, i) => `
+               <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-purple-500/50 transition">
+                  <span class="text-white font-bold"><span class="text-slate-500 mr-2">${i+1}.</span>${h.name}</span>
+                  <span class="text-purple-400 font-bold">${h.res.toLocaleString()}</span>
+               </div>
+             `).join('')}
+           </div>
+        </div>
+      </div>
+    </div>
   `;
 }
 
@@ -2598,6 +2701,29 @@ function renderBingoView() {
               </div>
             `).join('')}
         </div>
+    </div>
+
+    <!-- 戰神拼圖貢獻 MVP -->
+    <div class="bg-slate-900/80 border border-slate-800 rounded-3xl p-5 mt-6">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+          <i data-lucide="award" class="w-4 h-4 text-fuchsia-400"></i>
+          <span>🧩 拼圖解謎 MVP (活躍貢獻榜)</span>
+        </h3>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+           ${(gameState?.heroStats || []).map(h => ({
+              ...h, res: (h.totalCalories || 0) + (h.totalTrimp || 0)*10 + (h.maxGap || 0)*50 + (h.zone2Count || 0)*1000
+           })).sort((a,b)=>b.res-a.res).slice(0, 9).map((h, i) => `
+             <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-3 text-xs rounded-xl border border-slate-800 flex items-center justify-between cursor-pointer hover:border-fuchsia-500/50 transition">
+                <div class="flex items-center space-x-2">
+                    <span class="font-bold text-slate-500 w-4">${i+1}.</span>
+                    <span class="font-bold text-white">${h.avatar ? `<img src="${h.avatar}" class="inline-block w-6 h-6 rounded-md mr-1 object-cover">` : ''}${h.name}</span>
+                </div>
+                <span class="text-fuchsia-400 font-bold font-mono">MVP Pts: ${Math.round(h.res).toLocaleString()}</span>
+             </div>
+           `).join('')}
+      </div>
     </div>
   `;
 }
