@@ -459,7 +459,8 @@ async function syncFromDatabase() {
       const maxHr = cleanNumber(a.max_hr);
       const calories = cleanNumber(a.calories);
 
-      const isValid = (duration >= 30.0) && inSeason && !isExcluded;
+      const minDurGlobal = gameState?.summary?.minDurationMinutes || bossConfig?.rules?.minDurationMinutes || 30.0;
+      const isValid = (duration >= minDurGlobal) && inSeason && !isExcluded;
       let physDmg = 0;
       let magDmg = 0;
       let gap = Math.max(0, maxHr - avgHr);

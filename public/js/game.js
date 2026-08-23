@@ -611,6 +611,8 @@ function calculateLiveClassicMetrics() {
 }
 
 function renderClassicModeView() {
+  const minDurEl = document.getElementById('classic-min-dur-text');
+  if (minDurEl) minDurEl.textContent = gameState?.summary?.minDurationMinutes || gameState?.boss?.rules?.minDurationMinutes || 30;
   const champContainer = document.getElementById('classic-champions-container');
   const metricContainer = document.getElementById('classic-metrics-container');
   const guildTableContainer = document.getElementById('classic-guild-table-container');
@@ -2369,8 +2371,14 @@ function renderFactionWarView() {
       <h2 class="text-xl font-black text-emerald-400 mb-1">【資料片四】雙城激戰 (Faction War)</h2>
       <p class="text-slate-300 text-sm leading-relaxed">
         戰火蔓延！全服公會已被強制編入兩大對立陣營。<br>
-        ⚔️ <strong>摧毀敵城：</strong> 你的極限無氧 (MaxGap, TRIMP) 將化為猛烈砲火，直接削減對手主城血量。<br>
-        🛡️ <strong>修復我城：</strong> 你的穩定有氧 (Zone2, Calories) 將化為物資修補己方陣地。雙塔對決，唯有一方能活下！
+        ⚔️ <strong>摧毀敵城：</strong> 你的極限無氧化為猛烈砲火！<span class="text-rose-400 font-mono font-bold tracking-wider">[ 攻城傷害 = TRIMP × 10 + MaxGap × 100 ]</span><br>
+        🛡️ <strong>修復我城：</strong> 你的穩定有氧化為物資修補己方！<span class="text-cyan-400 font-mono font-bold tracking-wider">[ 修復量 = Calories + Zone2打卡次數 × 5000 ]</span><br>
+        <div class="mt-2 text-[10px] text-slate-400 bg-slate-900/50 p-2 rounded border border-slate-700/50">
+          <p><span class="text-amber-500 font-bold">⏱️ 系統判斷規則：</span> 所有數據僅採計單次持續 <strong>${gameState?.summary?.minDurationMinutes || gameState?.boss?.rules?.minDurationMinutes || 30}分鐘</strong> 以上的運動。</p>
+          <p>• <strong>Zone2：</strong>該次運動平均心率落在個人最大心率 (MaxHR) 60% ~ 75% 之間。</p>
+          <p>• <strong>MaxGap：</strong>單次最高心率 - 單次平均心率。</p>
+          <p>• <strong>TRIMP：</strong>時間 × (均心率÷MaxHR) × <i>e</i>^(1.92×(均心率÷MaxHR))</p>
+        </div>
       </p>
     </div>
 
@@ -2424,7 +2432,7 @@ function renderFactionWarView() {
       </div>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
-           <h4 class="text-xs font-bold text-rose-400 mb-2">🔥 攻城毀滅者 (輸出排行)</h4>
+           <h4 class="text-xs font-bold text-rose-400 mb-2">🔥 攻城毀滅者 <span class="text-[9px] text-slate-500 font-normal outline outline-1 outline-slate-700 px-1 rounded">TRIMP×10 + MaxGap×100</span></h4>
            <div class="space-y-2">
              ${(gameState?.heroStats || []).map(h => ({
                 ...h, dmg: (h.totalTrimp || 0) * 10 + (h.maxGap || 0) * 100
@@ -2441,7 +2449,7 @@ function renderFactionWarView() {
            </div>
         </div>
         <div>
-           <h4 class="text-xs font-bold text-cyan-400 mb-2">🛠️ 城牆守護者 (修復排行)</h4>
+           <h4 class="text-xs font-bold text-cyan-400 mb-2">🛠️ 城牆守護者 <span class="text-[9px] text-slate-500 font-normal outline outline-1 outline-slate-700 px-1 rounded">Cal. + Zone2×5000</span></h4>
            <div class="space-y-2">
              ${(gameState?.heroStats || []).map(h => ({
                 ...h, rep: (h.zone2Count || 0) * 5000 + (h.totalCalories || 0)
@@ -2475,11 +2483,11 @@ function renderSurvivalView() {
   const daysDiff = Math.max(1, Math.floor((today - startObj) / (1000 * 60 * 60 * 24)));
   const decayPerDay = gameState?.survival?.decayPerDay || 500;
   const currentPenalty = daysDiff * decayPerDay;
+  const maxHp = gameState?.survival?.maxHp || 10000;
 
   const survivingHeroes = heroList.map(h => {
       const food = (h.totalCalories || 0); // Calories -> HP regen
       const scavenge = (h.totalTrimp || 0) * 1.5; // Trimp -> bonus scavenge
-      const maxHp = gameState?.survival?.maxHp || 10000;
       const currentHp = Math.floor(maxHp - currentPenalty + food + scavenge);
       const isDead = currentHp <= 0;
       return { ...h, currentHp, isDead, food, scavenge };
@@ -2491,9 +2499,17 @@ function renderSurvivalView() {
       <h2 class="text-xl font-black text-amber-500 mb-1">【資料片五】飢餓法則 (Survival Rules)</h2>
       <p class="text-slate-300 text-sm leading-relaxed">
         身處嚴酷的荒野沙漠，每個人開局擁有 10,000 點生存值。每天毒圈都會自動剝奪大家 500 點生命線（目前全服已流失 ${currentPenalty.toLocaleString()} HP）！<br>
-        🍖 <strong>外出狩獵：</strong> 消耗的熱量 (Calories) 1:1 補血！訓練衝力 (TRIMP) 也能化為野外搜刮物資回血。<br>
-        ☠️ <strong>淘汰機制：</strong> HP 掉到底部的英雄將化為白骨，唯有堅持每日運動的人，才能見到明天的太陽。
+        🍖 <strong>外出狩獵與搜刮：</strong> <span class="text-emerald-400 font-mono font-bold tracking-wider">[ 狩獵補血 = Calories × 1 ]</span> / <span class="text-amber-300 font-mono font-bold tracking-wider">[ 搜刮物資 = TRIMP × 1.5 ]</span><br>
+        ☠️ <strong>淘汰與結算：</strong> <span class="text-rose-400 font-mono font-bold tracking-wider">[ 最終生存HP = 最大血量 - (天數 × 每日衰減) + 狩獵補血 + 搜刮物資 ]</span>
       </p>
+      <div class="mt-2 text-[10px] text-slate-400 bg-slate-900/50 p-2 rounded border border-slate-700/50">
+          <p><span class="text-amber-500 font-bold">⏱️ 系統判斷規則：</span> 所有鍛鍊僅採計單次持續 <strong>${gameState?.summary?.minDurationMinutes || gameState?.boss?.rules?.minDurationMinutes || 30}分鐘</strong> 以上的運動。</p>
+          <p>• <strong>TRIMP (衝力)：</strong>時間 × (均心率÷MaxHR) × <i>e</i>^(1.92×(均心率÷MaxHR))</p>
+      </div>
+      <div class="mt-2 text-[10px] text-slate-400 bg-slate-900/50 p-2 rounded border border-slate-700/50">
+          <p><span class="text-amber-500 font-bold">⏱️ 系統判斷規則：</span> 所有鍛鍊僅採計單次持續 <strong>${gameState?.summary?.minDurationMinutes || 30}分鐘</strong> 以上的運動。</p>
+          <p>• <strong>TRIMP (衝力)：</strong>計算方式為 時間 × (均心率÷MaxHR) × <i>e</i>^(1.92×(均心率÷MaxHR))</p>
+      </div>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2510,7 +2526,7 @@ function renderSurvivalView() {
                ${i === 0 && !h.isDead ? '<span class="absolute top-2 right-2 text-2xl">👑</span>' : ''}
             </div>
             <div class="text-[10px] text-slate-400 flex justify-between mb-1">
-               <span>生存值HP</span>
+               <span>生存值HP <span class="text-[8px] text-slate-500 font-normal outline outline-1 outline-slate-700 px-1 rounded ml-1">= 初始 - 毒圈 + 熱量 + 衝力</span></span>
                <span class="text-amber-400 font-mono text-sm font-bold">${Math.max(0, h.currentHp).toLocaleString()}</span>
             </div>
             <div class="w-full h-1.5 ${h.isDead ? 'bg-slate-800' : 'bg-slate-900'} rounded-full overflow-hidden">
@@ -2559,11 +2575,17 @@ function renderBaseBuilderView() {
       <h2 class="text-xl font-black text-blue-400 mb-1">【資料片六】鋼鐵要塞 (Iron Fortress)</h2>
       <p class="text-slate-300 text-sm leading-relaxed">
         這不是一個人的戰鬥，全服玩家的汗水將化作資源，我們正在合力升級這座村莊基地！<br>
-        🌳 <strong>糧倉與木材 (Calories)：</strong> 燃燒熱量提供基礎建材。<br>
-        ⚙️ <strong>兵工廠鋼鐵 (TRIMP)：</strong> 引擎過載練出來的厚實鋼鐵。<br>
-        🔮 <strong>魔法神石 (無氧落差 + 燃脂次數)：</strong> 精準的心率控制提煉出的高階資源。<br>
+        🌳 <strong>糧倉與木材：</strong> 燃燒熱量提供基礎建材。<span class="text-emerald-400 font-mono font-bold tracking-wider">[ 木材產量 = Calories ]</span><br>
+        ⚙️ <strong>兵工廠鋼鐵：</strong> 引擎過載練出來的厚實鋼鐵。<span class="text-blue-400 font-mono font-bold tracking-wider">[ 鋼鐵產量 = TRIMP ]</span><br>
+        🔮 <strong>魔法神石：</strong> 精準的心率控制提煉出高階資源。<span class="text-purple-400 font-mono font-bold tracking-wider">[ 神石產量 = MaxGap × 10 + Zone2次數 × 50 ]</span><br>
         <span class="text-rose-300">⚠️ 升級存在「偏食危機」！如果大家只跑有氧，鋼鐵量太少，全村等級就會卡死升不上去！</span>
       </p>
+      <div class="mt-2 text-[10px] text-slate-400 bg-slate-900/50 p-2 rounded border border-slate-700/50">
+          <p><span class="text-amber-500 font-bold">⏱️ 系統判斷規則：</span> 所有鍛鍊僅採計單次持續 <strong>${gameState?.summary?.minDurationMinutes || gameState?.boss?.rules?.minDurationMinutes || 30}分鐘</strong> 以上的運動。</p>
+          <p>• <strong>Zone2：</strong>該次運動平均心率落在個人最大心率 (MaxHR) 60% ~ 75% 之間。</p>
+          <p>• <strong>MaxGap：</strong>單次最高心率 - 單次平均心率。</p>
+          <p>• <strong>TRIMP (鋼鐵)：</strong>時間 × (均心率÷MaxHR) × <i>e</i>^(1.92×(均心率÷MaxHR))</p>
+      </div>
     </div>
 
     <div class="bg-slate-950 border border-slate-800 rounded-3xl p-6 relative overflow-hidden mb-6 glow-border-cyan text-center">
@@ -2602,7 +2624,7 @@ function renderBaseBuilderView() {
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div>
-           <h4 class="text-xs font-bold text-emerald-400 mb-2">🌳 頂級伐木工 (Wood)</h4>
+           <h4 class="text-xs font-bold text-emerald-400 mb-2">🌳 頂級伐木工 <span class="text-[9px] text-slate-500 font-normal outline outline-1 outline-slate-700 px-1 rounded">總卡路里</span></h4>
            <div class="space-y-2">
              ${(gameState?.heroStats || []).map(h => ({
                 ...h, res: (h.totalCalories || 0)
@@ -2615,7 +2637,7 @@ function renderBaseBuilderView() {
            </div>
         </div>
         <div>
-           <h4 class="text-xs font-bold text-blue-400 mb-2">⚙️ 鋼鐵礦工 (Steel)</h4>
+           <h4 class="text-xs font-bold text-blue-400 mb-2">⚙️ 鋼鐵礦工 <span class="text-[9px] text-slate-500 font-normal outline outline-1 outline-slate-700 px-1 rounded">總TRIMP</span></h4>
            <div class="space-y-2">
              ${(gameState?.heroStats || []).map(h => ({
                 ...h, res: (h.totalTrimp || 0)
@@ -2628,7 +2650,7 @@ function renderBaseBuilderView() {
            </div>
         </div>
         <div>
-           <h4 class="text-xs font-bold text-purple-400 mb-2">🔮 魔法煉金術師 (Mana)</h4>
+           <h4 class="text-xs font-bold text-purple-400 mb-2">🔮 魔法煉金術師 <span class="text-[9px] text-slate-500 font-normal outline outline-1 outline-slate-700 px-1 rounded">Gap×10+Z2×50</span></h4>
            <div class="space-y-2">
              ${(gameState?.heroStats || []).map(h => ({
                 ...h, res: ((h.maxGap || 0) * 10 + (h.zone2Count || 0) * 50)
@@ -2709,6 +2731,7 @@ function renderBingoView() {
         <h3 class="text-sm font-bold text-white flex items-center space-x-2">
           <i data-lucide="award" class="w-4 h-4 text-fuchsia-400"></i>
           <span>🧩 拼圖解謎 MVP (活躍貢獻榜)</span>
+          <span class="text-[9px] text-slate-400 ml-auto font-mono bg-slate-800 px-2 py-0.5 rounded">計分公式: Calories + TRIMP×10 + MaxGap×50 + Zone2×1000</span>
         </h3>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
