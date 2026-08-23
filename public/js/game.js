@@ -1657,20 +1657,27 @@ function switchChronicleSeason() {
 }
 
 function renderChroniclesView() {
+  let lore;
   const container = document.getElementById("chronicles-dynamic-content");
   if (!container) return;
-  const lore = `<div class="mb-4 bg-slate-900 border-l-4 border-rose-500 p-4 rounded-r-xl shadow-lg"><h2 class="text-xl font-black text-rose-500 mb-1">【資料片三】世界 Boss 討伐 (World Raid)</h2><p class="text-slate-300 text-sm">上古神獸降臨！這次我們沒有對手，因為全伺服器必須團結一致，將熱量化為物理重擊、將 TRIMP 化為無情的魔法火砲。用無氧極限 (MaxGap) 觸發爆擊，在賽季結束前將這個怪物的血條削成灰燼！</p></div>`;
-  const lore = `<div class="mb-6 bg-slate-900 border-l-4 border-blue-500 p-4 rounded-r-xl shadow-lg"><h2 class="text-xl font-black text-blue-400 mb-1">【資料片二】RPG 職業覺醒 (Class Talents)</h2><p class="text-slate-300 text-sm">英雄們覺醒了專屬的天賦：狂戰士靠高心跳壓榨極限，遊俠依賴平穩的燃脂區間堆疊傷害，聖騎士化身團隊的血牛，而刺客則尋求極致的痛苦密度。找出你的定位，發揮 100% 的職業加成吧！</p></div>`;
-  container.innerHTML = lore;
-  const lore = `<div class="mb-6 bg-slate-900 border-l-4 border-amber-500 p-4 rounded-r-xl shadow-lg"><h2 class="text-xl font-black text-amber-500 mb-1">【資料片一】經典競技 (Classic Arena)</h2><p class="text-slate-300 text-sm">在這個最初的競技場，靠的是最純粹的汗水與毅力。沒有花俏的魔法防護，只有真實的痛苦轉換為榮耀。團隊的勝敗，取決於每一個人的參與度，只要有人偷懶跌破 30 分鐘門檻，都會拖累整個公會的均分！</p></div>`;
-  container.innerHTML = lore;
-
   const snapshots = getAllSnapshots();
   const snap = snapshots.find(s => s.id === selectedChronicle) || snapshots[0];
 
   if (!snap) {
     container.innerHTML = `<div class="p-8 text-center text-slate-500">尚無選擇的歷史快照</div>`;
     return;
+  }
+
+  {
+    let lore = "";
+    if (snap.type === "world_boss" || snap.type === "boss") {
+      lore = `<div class="mb-4 bg-slate-900 border-l-4 border-rose-500 p-4 rounded-r-xl shadow-lg"><h2 class="text-xl font-black text-rose-500 mb-1">【資料片三】世界 Boss 討伐 (World Raid)</h2><p class="text-slate-300 text-sm">上古神獸降臨！這次我們沒有對手，因為全伺服器必須團結一致，將熱量化為物理重擊、將 TRIMP 化為無情的魔法火砲。用無氧極限 (MaxGap) 觸發爆擊，在賽季結束前將這個怪物的血條削成灰燼！</p></div>`;
+    } else if (snap.type === "rpg" || snap.type === "rpg_talent") {
+      lore = `<div class="mb-6 bg-slate-900 border-l-4 border-blue-500 p-4 rounded-r-xl shadow-lg"><h2 class="text-xl font-black text-blue-400 mb-1">【資料片二】RPG 職業覺醒 (Class Talents)</h2><p class="text-slate-300 text-sm">英雄們覺醒了專屬的天賦：狂戰士靠高心跳壓榨極限，遊俠依賴平穩的燃脂區間堆疊傷害，聖騎士化身團隊的血牛，而刺客則尋求極致的痛苦密度。找出你的定位，發揮 100% 的職業加成吧！</p></div>`;
+    } else {
+      lore = `<div class="mb-6 bg-slate-900 border-l-4 border-amber-500 p-4 rounded-r-xl shadow-lg"><h2 class="text-xl font-black text-amber-500 mb-1">【資料片一】經典競技 (Classic Arena)</h2><p class="text-slate-300 text-sm">在這個最初的競技場，靠的是最純粹的汗水與毅力。沒有花俏的魔法防護，只有真實的痛苦轉換為榮耀。團隊的勝敗，取決於每一個人的參與度，只要有人偷懶跌破 30 分鐘門檻，都會拖累整個公會的均分！</p></div>`;
+    }
+    container.innerHTML = lore;
   }
 
   // =========================================================================
