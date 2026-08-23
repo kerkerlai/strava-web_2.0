@@ -1481,14 +1481,14 @@ function openHeroDetailModal(heroName) {
     title.innerHTML = `
     <div class="flex items-center space-x-3 w-full">
       <div class="w-14 h-14 rounded-lg bg-slate-800 overflow-hidden border-2 border-slate-700 flex-shrink-0 relative">
-        <img src="${hero.avatar || \`https://api.dicebear.com/7.x/bottts/svg?seed=${hero.name}\`}" class="w-full h-full object-cover">
+        <img src="${hero.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${hero.name}`}" class="w-full h-full object-cover">
       </div>
       <div class="flex-grow">
         <div class="flex flex-wrap items-center justify-between w-full gap-2">
            <div class="flex items-center flex-wrap gap-1">
                <span class="font-bold text-white tracking-wide text-lg">${hero.name}</span>
                <span class="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 text-[10px]">${hero.guild}</span>
-               ${(gameState?.activeMode === 'rpg_talent' || gameState?.activeMode === 'rpg' || (typeof currentView !== 'undefined' && currentView === 'chronicles' && getAllSnapshots().find(s => s.id === selectedChronicle)?.type === 'rpg')) ? \`<span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${cls.bg} ml-1">${cls.badge} ${cls.name}</span>\` : ''}
+               ${(gameState?.activeMode === 'rpg_talent' || gameState?.activeMode === 'rpg' || (typeof currentView !== 'undefined' && currentView === 'chronicles' && getAllSnapshots().find(s => s.id === selectedChronicle)?.type === 'rpg')) ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${cls.bg} ml-1">${cls.badge} ${cls.name}</span>` : ''}
            </div>
            
            <!-- 明確的上傳按鈕 -->

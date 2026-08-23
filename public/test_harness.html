@@ -1,0 +1,20 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <script>
+        window.has_error = false;
+        window.onerror = function(message) {
+            window.has_error = true;
+            console.error("SYNTAX_ERROR: " + message);
+        };
+    </script>
+    <script src="js/game.js"></script>
+    <script>
+        if (!window.has_error) {
+            console.log("ALL_OK");
+        }
+    </script>
+</head>
+<body></body>
+</html>
