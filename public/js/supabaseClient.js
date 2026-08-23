@@ -78,6 +78,25 @@ const supabase = {
       throw new Error(`Supabase delete [${table}] failed (${res.status}): ${err}`);
     }
     return true;
+  },
+
+  async uploadFile(bucket, filePath, fileData, contentType) {
+    const url = `${SUPABASE_CONFIG.url}/storage/v1/object/${bucket}/${filePath}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_CONFIG.anonKey,
+        "Authorization": `Bearer ${SUPABASE_CONFIG.anonKey}`,
+        "Content-Type": contentType,
+        "x-upsert": "true" 
+      },
+      body: fileData
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Supabase upload [${bucket}] failed (${res.status}): ${err}`);
+    }
+    return `${SUPABASE_CONFIG.url}/storage/v1/object/public/${bucket}/${filePath}`;
   }
 };
 

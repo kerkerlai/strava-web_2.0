@@ -635,7 +635,15 @@ function renderHeroTable() {
   const mode = document.getElementById('cfg-active-mode')?.value || 'classic';
   tbody.innerHTML = '';
 
-  gameState.heroes.forEach(h => {
+    const heroesArr = Array.isArray(gameState.heroes) ? gameState.heroes : Object.values(gameState.heroes || {});
+  const sortedHeroes = heroesArr.sort((a,b) => {
+      let ag = a.guild || '', bg = b.guild || '';
+      if(ag !== bg) return ag.localeCompare(bg);
+      let ac = a.rpgClass || '', bc = b.rpgClass || '';
+      if(ac !== bc) return ac.localeCompare(bc);
+      return (a.name||'').localeCompare(b.name||'');
+  });
+  sortedHeroes.forEach(h => {
     const tr = document.createElement('tr');
     tr.className = 'hover:bg-slate-900/60 transition';
     const heroClass = h.rpgClass || '狂戰士';

@@ -286,7 +286,17 @@ function setupImmersiveNavigation(mode) {
   let activeTabIcon = 'trophy';
   let activeTabLabel = '資料片一：經典競技模式';
 
-  if (mode === 'rpg_talent' || mode === 'rpg') {
+
+  if (mode === 'faction_war') {
+    activeTabName = 'faction'; activeTabIcon = 'swords'; activeTabLabel = '資料片四：雙城激戰';
+  } else if (mode === 'survival') {
+    activeTabName = 'survival'; activeTabIcon = 'skull'; activeTabLabel = '資料片五：飢餓法則';
+  } else if (mode === 'base_builder') {
+    activeTabName = 'base'; activeTabIcon = 'castle'; activeTabLabel = '資料片六：鋼鐵要塞';
+  } else if (mode === 'bingo') {
+    activeTabName = 'bingo'; activeTabIcon = 'grid'; activeTabLabel = '資料片七：戰神拼圖';
+  } else if (mode === 'rpg_talent' || mode === 'rpg') {
+
     activeTabName = 'rpg';
     activeTabIcon = 'sword';
     activeTabLabel = '資料片二：RPG 職業天賦模式';
@@ -329,7 +339,7 @@ function goToActiveExpansion() {
 
 function switchMainTab(tab) {
   currentMainTab = tab;
-  const allTabs = ['classic', 'rpg', 'boss', 'viewer', 'chronicles'];
+  const allTabs = ['classic', 'rpg', 'boss', 'faction', 'survival', 'base', 'bingo', 'viewer', 'chronicles'];
   allTabs.forEach(t => {
     const content = document.getElementById(`tab-content-${t}`);
     if (content) {
@@ -358,6 +368,10 @@ function switchMainTab(tab) {
     if (tab === 'classic') renderClassicModeView();
     if (tab === 'rpg') renderRPGClassTalentView();
     if (tab === 'boss') renderWorldBossView();
+    if (tab === 'faction') renderFactionWarView();
+    if (tab === 'survival') renderSurvivalView();
+    if (tab === 'base') renderBaseBuilderView();
+    if (tab === 'bingo') renderBingoView();
   }
 
   if (window.lucide) lucide.createIcons();
@@ -401,14 +415,19 @@ function renderAllGameViews() {
   const activeMode = gameState?.activeMode || "classic";
   setupImmersiveNavigation(activeMode);
   renderActiveExpansionBadge();
-  renderClassicModeView();
-  renderRPGClassTalentView();
-  renderWorldBossView();
+  if (activeMode === 'classic') renderClassicModeView();
+  if (activeMode === 'rpg' || activeMode === 'rpg_talent') renderRPGClassTalentView();
+  if (activeMode === 'boss' || activeMode === 'world_boss') renderWorldBossView();
+  if (activeMode === 'faction_war') renderFactionWarView();
+  if (activeMode === 'survival') renderSurvivalView();
+  if (activeMode === 'base_builder') renderBaseBuilderView();
+  if (activeMode === 'bingo') renderBingoView();
   populateViewerDropdowns();
   populateChroniclesDropdown();
 
   if (window.lucide) lucide.createIcons();
 }
+
 
 function renderActiveExpansionBadge() {
   const badgeEl = document.getElementById('active-expansion-badge');
@@ -417,6 +436,10 @@ function renderActiveExpansionBadge() {
   let label = '🏆 進行中：資料片一 • 經典競技模式';
   if (mode === 'rpg_talent' || mode === 'rpg') label = '⚔️ 進行中：資料片二 • RPG 職業天賦模式';
   if (mode === 'world_boss' || mode === 'boss') label = '🐉 進行中：資料片三 • 世界 Boss 討伐戰 (PvE Raid)';
+  if (mode === 'faction_war') label = '⚔️ 進行中：資料片四 • 雙城激戰 (陣營 PVE)';
+  if (mode === 'survival') label = '☠️ 進行中：資料片五 • 飢餓法則 (大逃殺)';
+  if (mode === 'base_builder') label = '🏰 進行中：資料片六 • 鋼鐵要塞 (共同建設)';
+  if (mode === 'bingo') label = '🧩 進行中：資料片七 • 戰神拼圖 (全服解鎖)';
   badgeEl.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1 animate-pulse"></span>${label}`;
 }
 
@@ -1125,7 +1148,15 @@ function populateViewerDropdowns() {
 
   select.innerHTML = '';
   const isRpgMode = (gameState?.activeMode === 'rpg_talent' || gameState?.activeMode === 'rpg');
-  gameState.heroes.forEach(h => {
+  
+  const heroesArr = Array.isArray(gameState.heroes) ? gameState.heroes : Object.values(gameState.heroes || {});
+  const sortedHeroes = heroesArr.sort((a,b) => {
+      if((a.guild||'') !== (b.guild||'')) return (a.guild||'').localeCompare(b.guild||'');
+      if((a.rpgClass||'') !== (b.rpgClass||'')) return (a.rpgClass || '').localeCompare(b.rpgClass || '');
+      return a.name.localeCompare(b.name);
+  });
+  sortedHeroes.forEach(h => {
+
     const opt = document.createElement('option');
     opt.value = h.name;
     opt.innerText = isRpgMode 
@@ -1448,9 +1479,14 @@ function openHeroDetailModal(heroName) {
   const totalCal = inSeasonActs.reduce((acc, a) => acc + (a.calories || 0), 0);
 
   title.innerHTML = `
-    <div class="flex items-center space-x-2">
-      <div class="w-8 h-8 rounded-lg bg-slate-800 overflow-hidden border border-slate-700 flex-shrink-0">
+    <div class="flex items-center space-x-2 relative group w-full">
+      <div class="w-12 h-12 rounded-lg bg-slate-800 overflow-hidden border border-slate-700 flex-shrink-0 relative">
         <img src="${hero.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${hero.name}`}" class="w-full h-full object-cover">
+        <label class="absolute inset-0 bg-black/60 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-[10px] text-white">
+          <i data-lucide="upload" class="w-4 h-4 mb-0.5"></i>
+          <span>更換</span>
+          <input type="file" accept="image/jpeg, image/png, image/webp" class="hidden" onchange="handleAvatarUpload('${hero.name}', this)" />
+        </label>
       </div>
       <div>
         <span class="text-sm font-black text-white">${hero.name}</span>
@@ -1623,6 +1659,11 @@ function switchChronicleSeason() {
 function renderChroniclesView() {
   const container = document.getElementById("chronicles-dynamic-content");
   if (!container) return;
+  const lore = `<div class="mb-4 bg-slate-900 border-l-4 border-rose-500 p-4 rounded-r-xl shadow-lg"><h2 class="text-xl font-black text-rose-500 mb-1">【資料片三】世界 Boss 討伐 (World Raid)</h2><p class="text-slate-300 text-sm">上古神獸降臨！這次我們沒有對手，因為全伺服器必須團結一致，將熱量化為物理重擊、將 TRIMP 化為無情的魔法火砲。用無氧極限 (MaxGap) 觸發爆擊，在賽季結束前將這個怪物的血條削成灰燼！</p></div>`;
+  const lore = `<div class="mb-6 bg-slate-900 border-l-4 border-blue-500 p-4 rounded-r-xl shadow-lg"><h2 class="text-xl font-black text-blue-400 mb-1">【資料片二】RPG 職業覺醒 (Class Talents)</h2><p class="text-slate-300 text-sm">英雄們覺醒了專屬的天賦：狂戰士靠高心跳壓榨極限，遊俠依賴平穩的燃脂區間堆疊傷害，聖騎士化身團隊的血牛，而刺客則尋求極致的痛苦密度。找出你的定位，發揮 100% 的職業加成吧！</p></div>`;
+  container.innerHTML = lore;
+  const lore = `<div class="mb-6 bg-slate-900 border-l-4 border-amber-500 p-4 rounded-r-xl shadow-lg"><h2 class="text-xl font-black text-amber-500 mb-1">【資料片一】經典競技 (Classic Arena)</h2><p class="text-slate-300 text-sm">在這個最初的競技場，靠的是最純粹的汗水與毅力。沒有花俏的魔法防護，只有真實的痛苦轉換為榮耀。團隊的勝敗，取決於每一個人的參與度，只要有人偷懶跌破 30 分鐘門檻，都會拖累整個公會的均分！</p></div>`;
+  container.innerHTML = lore;
 
   const snapshots = getAllSnapshots();
   const snap = snapshots.find(s => s.id === selectedChronicle) || snapshots[0];
@@ -2274,3 +2315,347 @@ window.addEventListener("gameStateSynced", (e) => {
     renderAllGameViews();
   }
 });
+
+// -------------------------------------------------------------
+// EXPANSION 4: 雙城激戰 (Faction War)
+// -------------------------------------------------------------
+function renderFactionWarView() {
+  const container = document.getElementById("tab-content-faction");
+  if (!container) return;
+
+  const summary = gameState?.summary || {};
+  const guildList = gameState?.guilds || [];
+  
+  // 假設兩大陣營：依據公會分兩組 (如果公會少於2，手動切半)
+  let faction1 = { name: "🟢 均衡聯盟", hp: 500000, dmg: 0, repair: 0, guilds: [] };
+  let faction2 = { name: "🔴 狂怒部落", hp: 500000, dmg: 0, repair: 0, guilds: [] };
+  
+  guildList.forEach((g, idx) => {
+      const isF1 = idx % 2 === 0;
+      const targetF = isF1 ? faction1 : faction2;
+      targetF.guilds.push(g.name);
+      
+      const gHeroes = (gameState?.heroStats || []).filter(h => h.guild === g.name);
+      const gTrimp = gHeroes.reduce((s, h) => s + (h.totalTrimp || 0), 0);
+      const gZone2 = gHeroes.reduce((s, h) => s + (h.zone2Count || 0), 0);
+      const gGap = gHeroes.reduce((s, h) => s + (h.maxGap || 0), 0);
+      const gCal = gHeroes.reduce((s, h) => s + (h.totalCalories || 0), 0);
+      
+      targetF.dmg += (gTrimp * 10) + (gGap * 100);
+      targetF.repair += (gZone2 * 5000) + gCal;
+  });
+
+  const f1CurrentHp = Math.max(0, faction1.hp - faction2.dmg + faction1.repair);
+  const f2CurrentHp = Math.max(0, faction2.hp - faction1.dmg + faction2.repair);
+  const f1Pct = Math.min(100, Math.max(0, (f1CurrentHp / faction1.hp) * 100));
+  const f2Pct = Math.min(100, Math.max(0, (f2CurrentHp / faction2.hp) * 100));
+
+  container.innerHTML = `
+    <!-- Lore / Story -->
+    <div class="mb-6 bg-slate-900 border-l-4 border-emerald-500 p-4 rounded-r-xl shadow-lg">
+      <h2 class="text-xl font-black text-emerald-400 mb-1">【資料片四】雙城激戰 (Faction War)</h2>
+      <p class="text-slate-300 text-sm leading-relaxed">
+        戰火蔓延！全服公會已被強制編入兩大對立陣營。<br>
+        ⚔️ <strong>摧毀敵城：</strong> 你的極限無氧 (MaxGap, TRIMP) 將化為猛烈砲火，直接削減對手主城血量。<br>
+        🛡️ <strong>修復我城：</strong> 你的穩定有氧 (Zone2, Calories) 將化為物資修補己方陣地。雙塔對決，唯有一方能活下！
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
+      
+      <!-- Faction 1 -->
+      <div class="bg-slate-900/80 rounded-3xl p-6 border border-emerald-500/30 relative overflow-hidden text-center glow-border-green">
+        <div class="text-xs text-emerald-500 font-bold mb-2">守護陣營</div>
+        <h3 class="text-3xl font-black text-white font-title mb-4">${faction1.name}</h3>
+        <p class="text-xs text-slate-400 mb-4">所屬公會：${faction1.guilds.join(', ') || '無'}</p>
+        <div class="mb-2">
+            <span class="text-sm font-bold text-slate-400">主城血量</span>
+            <div class="text-4xl font-rpg font-black text-emerald-400">${f1CurrentHp.toLocaleString()}</div>
+        </div>
+        <div class="w-full h-4 bg-slate-950 rounded-full overflow-hidden border border-slate-700">
+            <div class="h-full bg-emerald-500" style="width: ${f1Pct}%"></div>
+        </div>
+        <div class="mt-4 flex justify-between text-xs text-slate-500">
+            <span>承受打擊: <b class="text-rose-400">${faction2.dmg.toLocaleString()}</b></span>
+            <span>修復值: <b class="text-cyan-400">+${faction1.repair.toLocaleString()}</b></span>
+        </div>
+      </div>
+
+      <!-- Faction 2 -->
+      <div class="bg-slate-900/80 rounded-3xl p-6 border border-rose-500/30 relative overflow-hidden text-center glow-border-red">
+        <div class="text-xs text-rose-500 font-bold mb-2">狂怒陣營</div>
+        <h3 class="text-3xl font-black text-white font-title mb-4">${faction2.name}</h3>
+        <p class="text-xs text-slate-400 mb-4">所屬公會：${faction2.guilds.join(', ') || '無'}</p>
+        <div class="mb-2">
+            <span class="text-sm font-bold text-slate-400">主城血量</span>
+            <div class="text-4xl font-rpg font-black text-rose-400">${f2CurrentHp.toLocaleString()}</div>
+        </div>
+        <div class="w-full h-4 bg-slate-950 rounded-full overflow-hidden border border-slate-700">
+            <div class="h-full bg-rose-500" style="width: ${f2Pct}%"></div>
+        </div>
+        <div class="mt-4 flex justify-between text-xs text-slate-500">
+            <span>承受打擊: <b class="text-rose-400">${faction1.dmg.toLocaleString()}</b></span>
+            <span>修復值: <b class="text-cyan-400">+${faction2.repair.toLocaleString()}</b></span>
+        </div>
+      </div>
+
+    </div>
+  `;
+}
+
+// -------------------------------------------------------------
+// EXPANSION 5: 飢餓法則 (Survival Battle Royale)
+// -------------------------------------------------------------
+function renderSurvivalView() {
+  const container = document.getElementById("tab-content-survival");
+  if (!container) return;
+
+  const heroList = gameState?.heroStats || [];
+  const today = new Date();
+  const startObj = new Date(gameState?.seasonStart || "2026/08/12");
+  const daysDiff = Math.max(1, Math.floor((today - startObj) / (1000 * 60 * 60 * 24)));
+  const decayPerDay = 500;
+  const currentPenalty = daysDiff * decayPerDay;
+
+  const survivingHeroes = heroList.map(h => {
+      const food = (h.totalCalories || 0); // Calories -> HP regen
+      const scavenge = (h.totalTrimp || 0) * 1.5; // Trimp -> bonus scavenge
+      const maxHp = 10000;
+      const currentHp = Math.floor(maxHp - currentPenalty + food + scavenge);
+      const isDead = currentHp <= 0;
+      return { ...h, currentHp, isDead, food, scavenge };
+  }).sort((a,b) => b.currentHp - a.currentHp);
+
+  container.innerHTML = `
+    <!-- Lore / Story -->
+    <div class="mb-6 bg-slate-900 border-l-4 border-amber-500 p-4 rounded-r-xl shadow-lg">
+      <h2 class="text-xl font-black text-amber-500 mb-1">【資料片五】飢餓法則 (Survival Rules)</h2>
+      <p class="text-slate-300 text-sm leading-relaxed">
+        身處嚴酷的荒野沙漠，每個人開局擁有 10,000 點生存值。每天毒圈都會自動剝奪大家 500 點生命線（目前全服已流失 ${currentPenalty.toLocaleString()} HP）！<br>
+        🍖 <strong>外出狩獵：</strong> 消耗的熱量 (Calories) 1:1 補血！訓練衝力 (TRIMP) 也能化為野外搜刮物資回血。<br>
+        ☠️ <strong>淘汰機制：</strong> HP 掉到底部的英雄將化為白骨，唯有堅持每日運動的人，才能見到明天的太陽。
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      ${survivingHeroes.map((h, i) => `
+        <div class="bg-slate-900/80 p-4 border rounded-2xl ${h.isDead ? 'border-slate-800 opacity-50 grayscale' : 'border-amber-500/40 relative overflow-hidden hover:border-amber-400'}">
+            <div class="flex items-center space-x-3 mb-3">
+               <div class="w-10 h-10 rounded-xl bg-slate-800 overflow-hidden border border-slate-700">
+                  <img src="${h.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${h.name}`}" class="w-full h-full object-cover">
+               </div>
+               <div>
+                  <h4 class="font-bold text-white">${h.name} <span class="text-[10px] text-slate-500">(${h.guild})</span></h4>
+                  <p class="text-[10px] ${h.isDead ? 'text-red-500' : 'text-emerald-400'} font-bold">${h.isDead ? '☠️ 已被荒野吞噬' : '🟢 存活中'}</p>
+               </div>
+               ${i === 0 && !h.isDead ? '<span class="absolute top-2 right-2 text-2xl">👑</span>' : ''}
+            </div>
+            <div class="text-[10px] text-slate-400 flex justify-between mb-1">
+               <span>生存值HP</span>
+               <span class="text-amber-400 font-mono text-sm font-bold">${Math.max(0, h.currentHp).toLocaleString()}</span>
+            </div>
+            <div class="w-full h-1.5 ${h.isDead ? 'bg-slate-800' : 'bg-slate-900'} rounded-full overflow-hidden">
+               <div class="h-full bg-amber-500" style="width: ${h.isDead ? 0 : Math.min(100, Math.max(0, (h.currentHp/10000)*100))}%"></div>
+            </div>
+            <div class="mt-3 pt-2 border-t border-slate-800 flex justify-between text-[9px] text-slate-500">
+               <span>狩獵熱量: +${Math.floor(h.food).toLocaleString()}</span>
+               <span>搜刮物資: +${Math.floor(h.scavenge).toLocaleString()}</span>
+            </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// -------------------------------------------------------------
+// EXPANSION 6: 鋼鐵要塞 (Base Builder)
+// -------------------------------------------------------------
+function renderBaseBuilderView() {
+  const container = document.getElementById("tab-content-base");
+  if (!container) return;
+
+  const heroList = gameState?.heroStats || [];
+  let totalWood = 0, totalSteel = 0, totalMana = 0;
+  heroList.forEach(h => {
+     totalWood += (h.totalCalories || 0); // Calories = Wood
+     totalSteel += (h.totalTrimp || 0);   // TRIMP = Steel
+     totalMana += (h.maxGap || 0) * 10 + (h.zone2Count || 0) * 50; // Mana
+  });
+
+  // Level thresholds (Lv1 -> 10k/500/1000)
+  const getLevel = (wood, steel, mana) => {
+      let lvl = 1;
+      let wReq=10000, sReq=500, mReq=500;
+      while (wood >= wReq && steel >= sReq && mana >= mReq && lvl < 10) {
+          lvl++; wReq+=15000; sReq+=750; mReq+=750;
+      }
+      return { lvl, nW: wReq, nS: sReq, nM: mReq };
+  };
+
+  const status = getLevel(totalWood, totalSteel, totalMana);
+
+  container.innerHTML = `
+    <!-- Lore / Story -->
+    <div class="mb-6 bg-slate-900 border-l-4 border-blue-500 p-4 rounded-r-xl shadow-lg">
+      <h2 class="text-xl font-black text-blue-400 mb-1">【資料片六】鋼鐵要塞 (Iron Fortress)</h2>
+      <p class="text-slate-300 text-sm leading-relaxed">
+        這不是一個人的戰鬥，全服玩家的汗水將化作資源，我們正在合力升級這座村莊基地！<br>
+        🌳 <strong>糧倉與木材 (Calories)：</strong> 燃燒熱量提供基礎建材。<br>
+        ⚙️ <strong>兵工廠鋼鐵 (TRIMP)：</strong> 引擎過載練出來的厚實鋼鐵。<br>
+        🔮 <strong>魔法神石 (無氧落差 + 燃脂次數)：</strong> 精準的心率控制提煉出的高階資源。<br>
+        <span class="text-rose-300">⚠️ 升級存在「偏食危機」！如果大家只跑有氧，鋼鐵量太少，全村等級就會卡死升不上去！</span>
+      </p>
+    </div>
+
+    <div class="bg-slate-950 border border-slate-800 rounded-3xl p-6 relative overflow-hidden mb-6 glow-border-cyan text-center">
+       <span class="text-xs font-bold text-slate-500">全服終極要塞</span>
+       <h3 class="text-4xl text-white font-black font-title mb-2">鐵峰堡壘</h3>
+       <div class="inline-block bg-blue-900/50 text-blue-300 px-4 py-1 rounded-full border border-blue-500/50 mb-6 font-bold tracking-wide">
+         當前等級：Level ${status.lvl}
+       </div>
+       
+       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="bg-slate-900 p-4 rounded-2xl border ${totalWood >= status.nW ? 'border-emerald-500' : 'border-slate-800'}">
+             <div class="text-2xl mb-1">🌳 木材庫存</div>
+             <div class="text-xl font-mono text-white mb-2">${totalWood.toLocaleString()} <span class="text-xs text-slate-500">/ ${status.nW.toLocaleString()} (升級需求)</span></div>
+             <div class="w-full h-2 bg-slate-950 rounded-full"><div class="h-full bg-emerald-500" style="width: ${Math.min(100, (totalWood/status.nW)*100)}%"></div></div>
+          </div>
+          <div class="bg-slate-900 p-4 rounded-2xl border ${totalSteel >= status.nS ? 'border-blue-500' : 'border-slate-800'}">
+             <div class="text-2xl mb-1">⚙️ 鋼鐵錠庫存</div>
+             <div class="text-xl font-mono text-white mb-2">${Math.round(totalSteel).toLocaleString()} <span class="text-xs text-slate-500">/ ${status.nS.toLocaleString()} (升級需求)</span></div>
+             <div class="w-full h-2 bg-slate-950 rounded-full"><div class="h-full bg-blue-500" style="width: ${Math.min(100, (totalSteel/status.nS)*100)}%"></div></div>
+          </div>
+          <div class="bg-slate-900 p-4 rounded-2xl border ${totalMana >= status.nM ? 'border-purple-500' : 'border-slate-800'}">
+             <div class="text-2xl mb-1">🔮 魔法原石</div>
+             <div class="text-xl font-mono text-white mb-2">${totalMana.toLocaleString()} <span class="text-xs text-slate-500">/ ${status.nM.toLocaleString()} (升級需求)</span></div>
+             <div class="w-full h-2 bg-slate-950 rounded-full"><div class="h-full bg-purple-500" style="width: ${Math.min(100, (totalMana/status.nM)*100)}%"></div></div>
+          </div>
+       </div>
+    </div>
+  `;
+}
+
+// -------------------------------------------------------------
+// EXPANSION 7: 遺跡拼圖 (Relic Bingo)
+// -------------------------------------------------------------
+function renderBingoView() {
+  const container = document.getElementById("tab-content-bingo");
+  if (!container) return;
+
+  const acts = (gameState?.activities || []).filter(a => a.inSeason && !a.isExcluded);
+  
+  // 9 Check conditions
+  const c1 = acts.filter(a => a.duration >= 60).length >= 10;
+  const c2 = acts.filter(a => a.isZone2).length >= 20;
+  const c3 = acts.reduce((s, a) => s + (a.trimp || 0), 0) >= 3000;
+  const c4 = acts.filter(a => a.gapVal >= 70).length >= 5;
+  const c5 = (gameState?.heroStats || []).filter(h => (h.validWorkouts || 0) >= 10).length >= 3;
+  const c6 = acts.reduce((s, a) => s + (a.calories || 0), 0) >= 50000;
+  const c7 = (gameState?.heroStats || []).filter(h => (h.maxGap || 0) >= 80).length >= 2;
+  const c8 = acts.filter(a => a.isManual).length <= 5; // Reward for auto-sync hardware
+  const c9 = true; // Free space
+
+  const grid = [
+     { key: "長征先鋒", desc: "全服累計 10 次超過 1 小時的訓練", ok: c1 },
+     { key: "燃脂大師", desc: "解鎖 20 次完美的 Zone 2 綠色指標", ok: c2 },
+     { key: "心跳超載", desc: "全服累積引擎衝力 TRIMP 破 3,000", ok: c3 },
+     { key: "爆發限界", desc: "出現 5 次落差大於 70 的魔鬼心率訓練", ok: c4 },
+     { key: "紀律部隊", desc: "伺服器至少有 3 人達成 10 次出勤", ok: c5 },
+     { key: "脂肪燃燒者", desc: "全服大熱量！總計燃燒 50,000 卡路里", ok: c6 },
+     { key: "死神擦肩", desc: "尋找 2 名極限 MaxGap 突破 80 的勇者", ok: c7 },
+     { key: "真金不怕火", desc: "賽季手動打卡(無穿戴數據) 次數控制在 5 次內", ok: c8 },
+     { key: "冒險起點", desc: "中央免費贈送的補給空間", ok: c9 },
+  ];
+
+  container.innerHTML = `
+    <!-- Lore / Story -->
+    <div class="mb-6 bg-slate-900 border-l-4 border-fuchsia-500 p-4 rounded-r-xl shadow-lg">
+      <h2 class="text-xl font-black text-fuchsia-400 mb-1">【資料片七】戰神拼圖 (Relic Bingo)</h2>
+      <p class="text-slate-300 text-sm leading-relaxed">
+        這一次我們不比數值暴力，比的是「精準解題」與「團隊溝通」！<br>
+        全服共享一張龐大的九宮格石板，每一格都有專屬的「解鎖條件」。<br>
+        <span class="text-fuchsia-300">💡 提示：每天在群組討論一下，有人該去刷 Zone2 燃脂框、有人必須挑戰重訓補足 MaxGap 落差！誰能把九宮格全部照亮？</span>
+      </p>
+    </div>
+
+    <div class="max-w-3xl mx-auto bg-slate-950 p-6 rounded-3xl border border-slate-800 shadow-2xl">
+        <h3 class="text-center text-2xl font-bold text-white mb-6">👁️‍🗨️ 古代英雄傳承石板</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            ${grid.map(g => `
+              <div class="aspect-square flex flex-col justify-center items-center text-center p-4 rounded-2xl border-2 transition-all 
+                ${g.ok ? 'bg-fuchsia-900/30 border-fuchsia-500 shadow-[0_0_15px_rgba(217,70,239,0.3)] glow-border-purple' : 'bg-slate-900/50 border-slate-800 opacity-60'}">
+                 <div class="text-3xl mb-2">${g.ok ? '✅' : '🔒'}</div>
+                 <h4 class="font-bold text-white text-sm mb-1">${g.key}</h4>
+                 <p class="text-[10px] text-slate-400">${g.desc}</p>
+              </div>
+            `).join('')}
+        </div>
+    </div>
+  `;
+}
+
+// -------------------------------------------------------------
+// USER AVATAR UPLOAD
+// -------------------------------------------------------------
+window.handleAvatarUpload = function(heroName, inputElement) {
+  if (!inputElement.files || inputElement.files.length === 0) return;
+  const file = inputElement.files[0];
+  
+  if (!file.type.startsWith('image/')) {
+    alert("請上傳有效的圖片檔案！");
+    return;
+  }
+  
+  if (typeof showToast === 'function') showToast("🖼️ 正在處理並壓縮圖片...", "blue");
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = async function() {
+      const canvas = document.createElement('canvas');
+      const MAX_SIZE = 150; // Limited size to save Supabase bandwidth
+      let width = img.width;
+      let height = img.height;
+
+      // Calculate new dimensions (Cover logic)
+      if (width > height) {
+        if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
+      } else {
+        if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      // Simple scaling
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      // Convert to WebP for extremely low file size
+      canvas.toBlob(async (blob) => {
+        try {
+          if (typeof showToast === 'function') showToast("上傳至 Supabase 雲端中...", "blue");
+          const safeName = heroName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+          const fileName = `${safeName}.webp`;
+          
+          let publicUrl = await supabase.uploadFile('avatars', fileName, blob, 'image/webp');
+          publicUrl += "?t=" + Date.now(); // Cache busting
+          
+          await supabase.update('heroes', `name=eq.${heroName}`, { avatar: publicUrl });
+          if (typeof showToast === 'function') showToast("🎉 頭像更新成功！", "green");
+          
+          // Re-render
+          const hero = gameState.heroes.find(h => h.name === heroName);
+          if (hero) hero.avatar = publicUrl;
+          if (typeof loadAllData === 'function') await loadAllData();
+          openHeroDetailModal(heroName);
+          lucide.createIcons();
+        } catch (err) {
+          console.error(err);
+          if (typeof showToast === 'function') showToast("❌ 頭像更新失敗: " + err.message, "red");
+        }
+      }, 'image/webp', 0.85); // 85% quality WebP
+    }
+    img.src = e.target.result;
+  }
+  reader.readAsDataURL(file);
+}

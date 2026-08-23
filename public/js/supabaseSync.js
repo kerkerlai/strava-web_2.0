@@ -639,5 +639,5 @@ window.syncFromDatabase = syncFromDatabase;
 
 document.addEventListener("DOMContentLoaded", () => {
   syncFromDatabase();
-  setInterval(syncFromDatabase, SYNC_CONFIG.pollIntervalSeconds * 1000);
+  // setInterval(syncFromDatabase, SYNC_CONFIG.pollIntervalSeconds * 1000); // 停止自動重整，改由手動觸發
 });
