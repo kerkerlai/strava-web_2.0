@@ -732,7 +732,7 @@ function renderClassicModeView() {
               </td>
               <td class="p-3 text-slate-400 font-mono text-[11px]">
                 <div class="flex flex-wrap gap-1.5">
-                  ${(g.members || []).map(m => `<span class="cursor-pointer hover:text-amber-300 hover:border-amber-500/60 transition px-2 py-0.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 text-xs font-bold inline-flex items-center space-x-1" onclick="openHeroDetailModal('${m}')"><i data-lucide="user" class="w-3 h-3 text-amber-400"></i><span>${m}</span></span>`).join('')}
+                  ${(g.members || []).map(m => renderHeroTag(m)).join('')}
                 </div>
               </td>
               <td class="p-3 font-mono text-amber-300">${g.perWorkouts} 次</td>
@@ -1470,6 +1470,10 @@ function filterViewerActivities() {
   if (thScoreCol) {
     if (activeMode === "classic") thScoreCol.innerText = "🔥 燃脂熱量";
     else if (activeMode === "rpg_talent" || activeMode === "rpg") thScoreCol.innerText = "⚡ 獲得戰力 (CP)";
+    else if (activeMode === "faction_war") thScoreCol.innerText = "🔥 攻城(DPS)";
+    else if (activeMode === "survival") thScoreCol.innerText = "❤️ 獲取生存值";
+    else if (activeMode === "base_builder") thScoreCol.innerText = "🪵 煉製建材";
+    else if (activeMode === "bingo") thScoreCol.innerText = "🧩 衝力指標";
     else thScoreCol.innerText = "⚔️ 造成傷害";
   }
 
@@ -1489,18 +1493,26 @@ function filterViewerActivities() {
       scoreColHtml = `<span class="text-slate-500">${a.inSeason ? "未滿30分" : "非本賽季"}</span>`;
     } else {
       if (activeMode === "classic") {
-        scoreColHtml = `<span class="text-amber-400 font-bold">${Math.round(a.calories)} kcal</span>`;
+        scoreColHtml = `<span class="text-amber-400 font-bold">${Math.round(a.calories || 0)} kcal</span>`;
       } else if (activeMode === "rpg_talent" || activeMode === "rpg") {
-        scoreColHtml = `<span class="text-purple-400 font-bold">${Math.round(a.combatPower || a.damage).toLocaleString()} CP</span>`;
+        scoreColHtml = `<span class="text-purple-400 font-bold">${Math.round(a.combatPower || a.damage || 0).toLocaleString()} CP</span>`;
+      } else if (activeMode === "faction_war") {
+        scoreColHtml = `<span class="text-rose-400 font-bold">🔥 ${Math.round((a.trimp || 0)*10 + (a.gapVal || 0)*100).toLocaleString()}</span>`;
+      } else if (activeMode === "survival") {
+        scoreColHtml = `<span class="text-emerald-400 font-bold">❤️ +${Math.round((a.calories || 0) + (a.trimp || 0)*1.5).toLocaleString()}</span>`;
+      } else if (activeMode === "base_builder") {
+        scoreColHtml = `<span class="text-emerald-400 font-bold">🪵 ${Math.round(a.calories || 0).toLocaleString()}</span>`;
+      } else if (activeMode === "bingo") {
+        scoreColHtml = `<span class="text-blue-400 font-bold">🧩 ${Math.round(a.trimp || 0).toLocaleString()}</span>`;
       } else {
-        scoreColHtml = `<span class="text-amber-400 font-bold">⚔️ ${(a.damage).toLocaleString()}</span>`;
+        scoreColHtml = `<span class="text-amber-400 font-bold">⚔️ ${(a.damage || 0).toLocaleString()}</span>`;
       }
     }
 
     tr.innerHTML = `
       <td class="p-3">${sourceBadge}</td>
       <td class="p-3 font-mono text-slate-400">${a.date || a.time}</td>
-      <td class="p-3 font-bold text-white cursor-pointer hover:text-cyan-400 hover:underline" onclick="openHeroDetailModal('${a.hero}')">${a.hero}</td>
+      <td class="p-3">${renderHeroTag(a.hero, "bg-transparent border-0 p-0 hover:bg-transparent font-bold hover:text-cyan-400")}</td>
       <td class="p-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px]">${a.guild}</span></td>
       <td class="p-3 font-mono">${a.duration}分</td>
       <td class="p-3 font-mono text-amber-300">${a.avgHr}</td>
@@ -1627,23 +1639,106 @@ function openHeroDetailModal(heroName) {
         <span class="font-bold text-amber-400 text-xs block truncate mt-1">${cls.badge} ${cls.name}</span>
       </div>
     `;
-  } else {
+  } else if (activeMode === "world_boss") {
     modalCardsHtml = `
       <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-        <span class="text-[10px] text-slate-400 block">賽季總傷害</span>
-        <span class="font-rpg font-bold text-amber-400 text-sm">${totalDmg.toLocaleString()}</span>
+        <span class="text-[10px] text-slate-400 block">對王總傷害</span>
+        <span class="font-rpg font-bold text-amber-400 text-sm">${Math.round(totalDmg).toLocaleString()}</span>
       </div>
       <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
         <span class="text-[10px] text-slate-400 block">累計時長</span>
         <span class="font-rpg font-bold text-cyan-400 text-sm">${Math.round(totalDur)} 分</span>
       </div>
       <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-        <span class="text-[10px] text-slate-400 block">總熱量</span>
-        <span class="font-rpg font-bold text-rose-400 text-sm">${Math.round(totalCal).toLocaleString()}</span>
+        <span class="text-[10px] text-slate-400 block">魔法攻擊 (TRIMP)</span>
+        <span class="font-rpg font-bold text-blue-400 text-sm">${Math.round(heroStat.totalTrimp || 0).toLocaleString()}</span>
       </div>
       <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-        <span class="text-[10px] text-slate-400 block">最高落差</span>
+        <span class="text-[10px] text-slate-400 block">物理狂化 (MaxGap)</span>
         <span class="font-rpg font-bold text-purple-400 text-sm">${heroStat.maxGap || 0}</span>
+      </div>
+    `;
+  } else if (activeMode === "faction_war") {
+    modalCardsHtml = `
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+        <span class="text-[10px] text-slate-400 block">攻城傷害</span>
+        <span class="font-rpg font-bold text-rose-400 text-sm">${Math.round((heroStat.totalTrimp || 0) * 10 + (heroStat.maxGap || 0) * 100).toLocaleString()}</span>
+      </div>
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+        <span class="text-[10px] text-slate-400 block">修復量</span>
+        <span class="font-rpg font-bold text-cyan-400 text-sm">${Math.round((heroStat.totalCalories || 0) + (heroStat.zone2Count || 0) * 5000).toLocaleString()}</span>
+      </div>
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+        <span class="text-[10px] text-slate-400 block">無氧 (TRIMP)</span>
+        <span class="font-rpg font-bold text-rose-300 text-sm">${Math.round(heroStat.totalTrimp || 0).toLocaleString()}</span>
+      </div>
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+        <span class="text-[10px] text-slate-400 block">有氧 (Zone2)</span>
+        <span class="font-rpg font-bold text-cyan-300 text-sm">${heroStat.zone2Count || 0} 次</span>
+      </div>
+    `;
+  } else if (activeMode === "survival") {
+    const decayPerDay = gameState?.survival?.decayPerDay || 500;
+    const startObj = new Date(gameState?.seasonStart || "2026/08/12");
+    const daysDiff = Math.max(1, Math.floor((new Date() - startObj) / (1000 * 60 * 60 * 24)));
+    const maxHp = gameState?.survival?.maxHp || 10000;
+    const currentHp = Math.floor(maxHp - (daysDiff * decayPerDay) + (heroStat.totalCalories || 0) + (heroStat.totalTrimp || 0) * 1.5);
+    const isDead = currentHp <= 0;
+    
+    modalCardsHtml = `
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+        <span class="text-[10px] ${isDead ? 'text-red-500' : 'text-emerald-400'} block">當前生存值</span>
+        <span class="font-rpg font-bold ${isDead ? 'text-slate-600' : 'text-amber-400'} text-sm">${Math.max(0, currentHp).toLocaleString()}</span>
+      </div>
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+        <span class="text-[10px] text-slate-400 block">狩獵熱量 (HP)</span>
+        <span class="font-rpg font-bold text-rose-400 text-sm">+${Math.round(heroStat.totalCalories || 0).toLocaleString()}</span>
+      </div>
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+        <span class="text-[10px] text-slate-400 block">搜刮物資 (TRIMP)</span>
+        <span class="font-rpg font-bold text-blue-400 text-sm">+${Math.round((heroStat.totalTrimp || 0) * 1.5).toLocaleString()}</span>
+      </div>
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+        <span class="text-[10px] text-slate-400 block">有效生存天數</span>
+        <span class="font-rpg font-bold text-cyan-400 text-sm">${heroStat.validWorkouts || 0} 荒野日</span>
+      </div>
+    `;
+  } else if (activeMode === "base_builder") {
+    modalCardsHtml = `
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+        <span class="text-[10px] text-slate-400 block">提供木材</span>
+        <span class="font-rpg font-bold text-emerald-400 text-sm">${Math.round(heroStat.totalCalories || 0).toLocaleString()}</span>
+      </div>
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+        <span class="text-[10px] text-slate-400 block">煉製鋼鐵</span>
+        <span class="font-rpg font-bold text-blue-400 text-sm">${Math.round(heroStat.totalTrimp || 0).toLocaleString()}</span>
+      </div>
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+        <span class="text-[10px] text-slate-400 block">魔法神石</span>
+        <span class="font-rpg font-bold text-purple-400 text-sm">${Math.round((heroStat.maxGap || 0) * 10 + (heroStat.zone2Count || 0) * 50).toLocaleString()}</span>
+      </div>
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+        <span class="text-[10px] text-slate-400 block">累計時長</span>
+        <span class="font-rpg font-bold text-cyan-400 text-sm">${Math.round(totalDur)} 分</span>
+      </div>
+    `;
+  } else if (activeMode === "bingo") {
+    modalCardsHtml = `
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+        <span class="text-[10px] text-slate-400 block">MVP 貢獻點數</span>
+        <span class="font-rpg font-bold text-amber-400 text-sm">${Math.round((heroStat.totalCalories || 0) + (heroStat.totalTrimp || 0) * 10 + (heroStat.maxGap || 0) * 50 + (heroStat.zone2Count || 0) * 1000).toLocaleString()}</span>
+      </div>
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+        <span class="text-[10px] text-slate-400 block">大熱量引擎</span>
+        <span class="font-rpg font-bold text-rose-400 text-sm">${Math.round(heroStat.totalCalories || 0).toLocaleString()}</span>
+      </div>
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+        <span class="text-[10px] text-slate-400 block">心跳超載 (TRIMP)</span>
+        <span class="font-rpg font-bold text-blue-400 text-sm">${Math.round(heroStat.totalTrimp || 0).toLocaleString()}</span>
+      </div>
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+        <span class="text-[10px] text-slate-400 block">完美 Zone 2</span>
+        <span class="font-rpg font-bold text-emerald-400 text-sm">${heroStat.zone2Count || 0} 次</span>
       </div>
     `;
   }
@@ -1666,11 +1761,19 @@ function openHeroDetailModal(heroName) {
           
           let actScoreTag = "";
           if (activeMode === "classic") {
-            actScoreTag = `<span class="font-mono font-bold text-amber-400 text-xs">${Math.round(a.calories)} kcal</span>`;
+            actScoreTag = `<span class="font-mono font-bold text-amber-400 text-xs">${Math.round(a.calories || 0)} kcal</span>`;
           } else if (activeMode === "rpg_talent" || activeMode === "rpg") {
-            actScoreTag = `<span class="font-mono font-bold text-purple-400 text-xs">⚡ ${Math.round(a.combatPower || a.damage).toLocaleString()} CP</span>`;
-          } else {
+            actScoreTag = `<span class="font-mono font-bold text-purple-400 text-xs">⚡ ${Math.round(a.combatPower || a.damage || 0).toLocaleString()} CP</span>`;
+          } else if (activeMode === "world_boss" || activeMode === "boss") {
             actScoreTag = `<span class="font-rpg font-bold text-amber-400 text-xs">⚔️ ${(a.damage || 0).toLocaleString()}</span>`;
+          } else if (activeMode === "faction_war") {
+            actScoreTag = `<span class="font-rpg font-bold text-rose-400 text-xs">🔥 攻 ${Math.round((a.trimp || 0)*10 + (a.gapVal || 0)*100).toLocaleString()}</span>`;
+          } else if (activeMode === "survival") {
+            actScoreTag = `<span class="font-rpg font-bold text-emerald-400 text-xs">❤️ +${Math.round((a.calories || 0) + (a.trimp || 0)*1.5).toLocaleString()}</span>`;
+          } else if (activeMode === "base_builder") {
+            actScoreTag = `<span class="font-rpg font-bold text-emerald-400 text-xs">🪵 ${Math.round(a.calories || 0).toLocaleString()}</span>`;
+          } else if (activeMode === "bingo") {
+            actScoreTag = `<span class="font-rpg font-bold text-blue-400 text-xs">🧩 ${Math.round(a.trimp || 0).toLocaleString()} TRIMP</span>`;
           }
 
           return `
@@ -2713,7 +2816,7 @@ function renderBaseBuilderView() {
                 ...h, res: (h.totalCalories || 0)
              })).sort((a,b)=>b.res-a.res).slice(0, 5).map((h, i) => `
                <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-emerald-500/50 transition">
-                  <span class="text-white font-bold"><span class="text-slate-500 mr-2">${i+1}.</span>${h.name}</span>
+                  <div class="flex items-center space-x-1.5 w-full overflow-hidden"><span class="text-slate-500 font-bold mr-1">${i+1}.</span>${renderHeroTag(h.name, "bg-transparent border-0 p-0 text-[11px] font-bold w-full justify-start truncate")}</div>
                   <span class="text-emerald-400 font-bold">${h.res.toLocaleString()}</span>
                </div>
              `).join('')}
@@ -2725,9 +2828,12 @@ function renderBaseBuilderView() {
              ${(gameState?.heroStats || []).map(h => ({
                 ...h, res: (h.totalTrimp || 0)
              })).sort((a,b)=>b.res-a.res).slice(0, 5).map((h, i) => `
-               <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-blue-500/50 transition">
-                  <span class="text-white font-bold"><span class="text-slate-500 mr-2">${i+1}.</span>${h.name}</span>
-                  <span class="text-blue-400 font-bold">${Math.round(h.res).toLocaleString()}</span>
+               <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex items-center justify-between cursor-pointer hover:border-blue-500/50 transition">
+                  <div class="flex items-center space-x-1.5 w-full overflow-hidden">
+                     <span class="text-slate-500 font-bold mr-1">${i+1}.</span>
+                     ${renderHeroTag(h.name, "bg-transparent border-0 p-0 text-xs w-full justify-start truncate")}
+                  </div>
+                  <span class="text-blue-400 font-bold font-mono pl-3 shrink-0">${Math.round(h.res).toLocaleString()}</span>
                </div>
              `).join('')}
            </div>
@@ -2739,7 +2845,7 @@ function renderBaseBuilderView() {
                 ...h, res: ((h.maxGap || 0) * 10 + (h.zone2Count || 0) * 50)
              })).sort((a,b)=>b.res-a.res).slice(0, 5).map((h, i) => `
                <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-purple-500/50 transition">
-                  <span class="text-white font-bold"><span class="text-slate-500 mr-2">${i+1}.</span>${h.name}</span>
+                  <div class="flex items-center space-x-1.5 w-full overflow-hidden"><span class="text-slate-500 font-bold mr-1">${i+1}.</span>${renderHeroTag(h.name, "bg-transparent border-0 p-0 text-[11px] font-bold w-full justify-start truncate")}</div>
                   <span class="text-purple-400 font-bold">${h.res.toLocaleString()}</span>
                </div>
              `).join('')}
@@ -2826,7 +2932,7 @@ function renderBingoView() {
                 ...h, res: (h.totalCalories || 0)
              })).sort((a,b)=>b.res-a.res).slice(0, 3).map((h, i) => `
                <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-rose-500/50 transition">
-                  <span class="text-white font-bold"><span class="text-slate-500 mr-1">${i+1}.</span> ${h.name}</span>
+                  <div class="flex items-center space-x-1.5 w-full overflow-hidden"><span class="text-slate-500 font-bold mr-1">${i+1}.</span>${renderHeroTag(h.name, "bg-transparent border-0 p-0 text-[11px] font-bold w-full justify-start truncate")}</div>
                   <span class="text-rose-400 font-bold font-mono">${Math.round(h.res).toLocaleString()} kcal</span>
                </div>
              `).join('')}
@@ -2841,7 +2947,7 @@ function renderBingoView() {
                 ...h, res: (h.validWorkouts || 0)
              })).sort((a,b)=>b.res-a.res).slice(0, 3).map((h, i) => `
                <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-amber-500/50 transition">
-                  <span class="text-white font-bold"><span class="text-slate-500 mr-1">${i+1}.</span> ${h.name}</span>
+                  <div class="flex items-center space-x-1.5 w-full overflow-hidden"><span class="text-slate-500 font-bold mr-1">${i+1}.</span>${renderHeroTag(h.name, "bg-transparent border-0 p-0 text-[11px] font-bold w-full justify-start truncate")}</div>
                   <span class="text-amber-400 font-bold font-mono">${Math.round(h.res).toLocaleString()} 次</span>
                </div>
              `).join('')}
@@ -2856,7 +2962,7 @@ function renderBingoView() {
                 ...h, res: (h.zone2Count || 0)
              })).sort((a,b)=>b.res-a.res).slice(0, 3).map((h, i) => `
                <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-emerald-500/50 transition">
-                  <span class="text-white font-bold"><span class="text-slate-500 mr-1">${i+1}.</span> ${h.name}</span>
+                  <div class="flex items-center space-x-1.5 w-full overflow-hidden"><span class="text-slate-500 font-bold mr-1">${i+1}.</span>${renderHeroTag(h.name, "bg-transparent border-0 p-0 text-[11px] font-bold w-full justify-start truncate")}</div>
                   <span class="text-emerald-400 font-bold font-mono">${Math.round(h.res).toLocaleString()} 次</span>
                </div>
              `).join('')}
@@ -2871,7 +2977,7 @@ function renderBingoView() {
                 ...h, res: (h.totalTrimp || 0)
              })).sort((a,b)=>b.res-a.res).slice(0, 3).map((h, i) => `
                <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-blue-500/50 transition">
-                  <span class="text-white font-bold"><span class="text-slate-500 mr-1">${i+1}.</span> ${h.name}</span>
+                  <div class="flex items-center space-x-1.5 w-full overflow-hidden"><span class="text-slate-500 font-bold mr-1">${i+1}.</span>${renderHeroTag(h.name, "bg-transparent border-0 p-0 text-[11px] font-bold w-full justify-start truncate")}</div>
                   <span class="text-blue-400 font-bold font-mono">${Math.round(h.res).toLocaleString()}</span>
                </div>
              `).join('')}
@@ -2886,7 +2992,7 @@ function renderBingoView() {
                 ...h, res: (h.maxGap || 0)
              })).sort((a,b)=>b.res-a.res).slice(0, 3).map((h, i) => `
                <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-purple-500/50 transition">
-                  <span class="text-white font-bold"><span class="text-slate-500 mr-1">${i+1}.</span> ${h.name}</span>
+                  <div class="flex items-center space-x-1.5 w-full overflow-hidden"><span class="text-slate-500 font-bold mr-1">${i+1}.</span>${renderHeroTag(h.name, "bg-transparent border-0 p-0 text-[11px] font-bold w-full justify-start truncate")}</div>
                   <span class="text-purple-400 font-bold font-mono">${Math.round(h.res).toLocaleString()}</span>
                </div>
              `).join('')}
