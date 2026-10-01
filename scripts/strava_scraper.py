@@ -53,11 +53,14 @@ def load_exclude_keywords_from_supabase():
             data = r.json()
             if data and "value" in data[0]:
                 kws = data[0]["value"]
-                print(f"⚙️ [Supabase] 成功載入排除關鍵字設定：{kws}")
-                return kws
+                if isinstance(kws, list) and len(kws) > 0:
+                    if "羽球" in kws and "Badminton" not in kws:
+                        kws.append("Badminton")
+                    print(f"⚙️ [Supabase] 成功載入排除關鍵字設定：{kws}")
+                    return kws
     except Exception as e:
         print(f"⚠️ 無法取得排除關鍵字: {e}")
-    return ["羽球"]
+    return ["羽球", "Badminton"]
 
 def get_existing_activity_ids():
     """從 Supabase activities 表取得所有現存活動 ID，避免重複寫入"""
@@ -171,14 +174,18 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
             if not act_id or act_id in existing_ids:
                 continue
 
-            act_name = act.get("activityName") or "運動"
+            act_name = str(act.get("activityName") or "運動")
+            sport_type = str(act.get("type") or "Workout")
 
-            # Check Excluded Keywords
-            if any(kw in act_name for kw in exclude_keywords if kw):
-                print(f"  🚫 略過排除關鍵字活動：{act_name} (#{act_id})")
+            # Check Excluded Keywords against BOTH activityName and sport_type (case-insensitive)
+            if any(
+                str(kw).strip().lower() in act_name.lower() or str(kw).strip().lower() in sport_type.lower()
+                for kw in (exclude_keywords or [])
+                if str(kw).strip()
+            ):
+                print(f"  🚫 略過排除關鍵字活動：{act_name} [類型: {sport_type}] (#{act_id})")
                 continue
 
-            sport_type = act.get("type", "Workout")
             elapsed = act.get("elapsedTime", 0)
             moving_time_mins = round(elapsed / 60) if elapsed else 0
             distance_km = 0
@@ -189,8 +196,8 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
             start_time_readable = None
 
             for st in act.get("stats", []):
-                val_str = st.get("value", "")
-                sub = st.get("key", "")
+                val_str = str(st.get("value", ""))
+                sub = str(st.get("key", ""))
                 if "Time" in val_str or "stat_one" in sub:
                     m_min = re.search(r"(\d+)m", val_str)
                     m_hr = re.search(r"(\d+)h", val_str)
@@ -203,6 +210,16 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
                 elif "Cal" in val_str or "kcal" in val_str:
                     m_cal = re.search(r"([\d,]+)", val_str)
                     if m_cal: calories = int(m_cal.group(1).replace(",", ""))
+                elif "km" in val_str.lower():
+                    m_km = re.search(r"([\d.,]+)\s*km", val_str, re.I)
+                    if m_km:
+                        try: distance_km = float(m_km.group(1).replace(",", ""))
+                        except Exception: pass
+                elif re.search(r"\b([\d,]+)\s*m\b", val_str):
+                    m_elev = re.search(r"\b([\d,]+)\s*m\b", val_str)
+                    if m_elev:
+                        try: elevation_m = int(m_elev.group(1).replace(",", ""))
+                        except Exception: pass
 
             if act.get("startDate"):
                 try:

@@ -449,13 +449,13 @@
             <thead class="bg-slate-900 text-slate-400 font-bold border-b border-slate-800 sticky top-0">
               <tr>
                 <th class="p-3">🔗 來源 ID</th>
-                <th class="p-3">📅 日期</th>
+                <th class="p-3 cursor-pointer hover:text-amber-400 transition select-none" onclick="sortAdminActivities('date')">📅 日期 <span id="admin-sort-date" class="text-amber-400">▼</span></th>
                 <th class="p-3">👤 英雄</th>
                 <th class="p-3">🏃 運動項目</th>
-                <th class="p-3">⏱️ 時長</th>
-                <th class="p-3">💓 心率 (均/大)</th>
-                <th class="p-3">🔥 熱量</th>
-                <th class="p-3">⚔️ 輸出值</th>
+                <th class="p-3 cursor-pointer hover:text-amber-400 transition select-none" onclick="sortAdminActivities('duration')">⏱️ 時長 <span id="admin-sort-duration" class="text-slate-600">↕</span></th>
+                <th class="p-3 cursor-pointer hover:text-amber-400 transition select-none" onclick="sortAdminActivities('avgHr')">💓 心率 (均/大) <span id="admin-sort-avgHr" class="text-slate-600">↕</span></th>
+                <th class="p-3 cursor-pointer hover:text-amber-400 transition select-none" onclick="sortAdminActivities('calories')">🔥 熱量 <span id="admin-sort-calories" class="text-slate-600">↕</span></th>
+                <th class="p-3 cursor-pointer hover:text-amber-400 transition select-none" onclick="sortAdminActivities('damage')">⚔️ 輸出值 <span id="admin-sort-damage" class="text-slate-600">↕</span></th>
                 <th class="p-3">狀態 / 異常檢測</th>
                 <th class="p-3 text-right">⚙️ 操作</th>
               </tr>
@@ -508,7 +508,27 @@
           </table>
         </div>
       </div>
-    </div></main>
+    </div>
+
+    <!-- Strava Cloud Crawler Exclude Keywords Config -->
+    <div class="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+      <div class="border-b border-slate-800 pb-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="bot" class="w-5 h-5 text-emerald-400"></i>
+          <div>
+            <h2 class="text-base font-bold text-white">🤖 Strava 雲端爬蟲 • 自動剃除運動關鍵字設定</h2>
+            <p class="text-xs text-slate-400 mt-0.5">爬蟲每 30 分鐘執行時，若運動「名稱」或「類型 (如 Badminton)」包含以下關鍵字將自動略過不寫入資料庫。</p>
+          </div>
+        </div>
+      </div>
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 text-xs">
+        <input type="text" id="cfg-exclude-keywords" placeholder="例如：羽球, Badminton, 散步 (以逗號分隔)" value="羽球, Badminton" class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-white font-mono outline-none focus:border-emerald-500">
+        <button onclick="saveExcludeKeywordsToSupabase()" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl transition shadow-md whitespace-nowrap">
+          💾 儲存排除關鍵字至雲端
+        </button>
+      </div>
+    </div>
+  </main>
 
   <!-- Add/Edit Hero Modal -->
   <div id="modal-hero" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
@@ -639,7 +659,5 @@
       </div>
     </div>
   </div>
-
-  <script src="js/game.js"></script>
 </body>
 </html>

@@ -230,6 +230,55 @@ function calculateLiveClassicStats(state) {
   return { champions: { teamAerobic, heroAerobic, teamAnaerobic, heroAnaerobic }, teamMetrics, guildList: gList, heroList: hList };
 }
 
+const DEFAULT_RPG_CLASSES = {
+  '狂戰士': {
+    name: '狂戰士',
+    enName: 'Berserker',
+    badge: '⚔️',
+    color: '#ef4444',
+    bg: 'bg-rose-950/40 border-rose-500/50 text-rose-300',
+    passiveName: '血性狂暴 (Bloodrage)',
+    passiveDesc: '無氧落差 (Gap) 獲得 +30% 額外戰力加成，大重量力竭突破。'
+  },
+  '聖騎士': {
+    name: '聖騎士',
+    enName: 'Paladin',
+    badge: '🛡️',
+    color: '#eab308',
+    bg: 'bg-amber-950/40 border-amber-500/50 text-amber-300',
+    passiveName: '鋼鐵壁壘 (Iron Bastion)',
+    passiveDesc: '出勤次數 × 150 點聖光防禦值，痛苦承受力轉化為堅毅戰力。'
+  },
+  '遊俠': {
+    name: '遊俠',
+    enName: 'Ranger',
+    badge: '🏹',
+    color: '#10b981',
+    bg: 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300',
+    passiveName: '精準巡航 (Precision Cruise)',
+    passiveDesc: 'Zone 2 有氧燃脂次數獲得 +35% 加成，巡航耐力極致轉化。'
+  },
+  '大法師': {
+    name: '大法師',
+    enName: 'Grand Mage',
+    badge: '🧙',
+    color: '#06b6d4',
+    bg: 'bg-cyan-950/40 border-cyan-500/50 text-cyan-300',
+    passiveName: '奧術過載 (Arcane Overload)',
+    passiveDesc: '訓練衝力 TRIMP 放大 1.5 倍奧術增幅，心肺負荷戰力最高。'
+  },
+  '刺客': {
+    name: '刺客',
+    enName: 'Shadow Assassin',
+    badge: '🗡️',
+    color: '#a855f7',
+    bg: 'bg-purple-950/40 border-purple-500/50 text-purple-300',
+    passiveName: '致命密擊 (Lethal Density)',
+    passiveDesc: '訓練密度 (Density) 獲得 2.0 倍暗影刺殺加成，短時極致爆發。'
+  }
+};
+if (!window.RPG_CLASSES) window.RPG_CLASSES = DEFAULT_RPG_CLASSES;
+
 /**
  * 計算 RPG 職業天賦模式 (RPG Talent Mode) 戰力、首席大師與公會羈絆
  */
@@ -241,9 +290,10 @@ function calculateLiveRPGStats(state) {
   const validActs = activities.filter(a => a.isValidAttack !== false && !a.isExcluded);
 
   const heroRpgMap = {};
+  const classDict = window.RPG_CLASSES || DEFAULT_RPG_CLASSES;
   heroes.forEach(h => {
     const heroClassKey = h.rpgClass || '狂戰士';
-    const cls = (window.RPG_CLASSES && window.RPG_CLASSES[heroClassKey]) || { name: heroClassKey, badge: '⚔️', color: '#ef4444' };
+    const cls = classDict[heroClassKey] || DEFAULT_RPG_CLASSES[heroClassKey] || DEFAULT_RPG_CLASSES['狂戰士'];
     heroRpgMap[h.name] = {
       name: h.name,
       guild: h.guild,
@@ -380,6 +430,7 @@ async function syncFromDatabase() {
     const baseConfig = configMap.base_config || gameState?.base || {};
     const bingoConfig = configMap.bingo_config || gameState?.bingo || {};
     const snapshots = configMap.snapshots || gameState?.snapshots || [];
+    const excludeKeywords = configMap.exclude_keywords || gameState?.excludeKeywords || ["羽球", "Badminton"];
 
     // Parse Active Season Dates
     let seasonStartStr = "2026/08/12";
@@ -388,12 +439,12 @@ async function syncFromDatabase() {
     if (activeMode === 'classic' && classicConfig.seasonStart) {
       seasonStartStr = classicConfig.seasonStart;
       seasonEndStr = classicConfig.seasonEnd || "2026/08/31";
-    } else if (activeMode === 'rpg_talent' && rpgConfig.seasonStart) {
+    } else if ((activeMode === 'rpg_talent' || activeMode === 'rpg') && rpgConfig.seasonStart) {
       seasonStartStr = rpgConfig.seasonStart;
       seasonEndStr = rpgConfig.seasonEnd || "2026/08/31";
-    } else if (bossConfig.seasonStart) {
-      seasonStartStr = bossConfig.seasonStart;
-      seasonEndStr = bossConfig.seasonEnd || "2026/08/31";
+    } else if (bossConfig.seasonStart || classicConfig.seasonStart || rpgConfig.seasonStart) {
+      seasonStartStr = bossConfig.seasonStart || classicConfig.seasonStart || rpgConfig.seasonStart;
+      seasonEndStr = bossConfig.seasonEnd || classicConfig.seasonEnd || rpgConfig.seasonEnd || "2026/08/31";
     }
 
     const seasonStartDate = parseActivityDate(seasonStartStr + " 00:00:00") || new Date(2026, 7, 12);
@@ -445,10 +496,15 @@ async function syncFromDatabase() {
     const physMult = bossConfig?.rules?.physMultiplier || 1.0;
     const magMult = bossConfig?.rules?.magicMultiplier || 15.0;
     const critMult = bossConfig?.rules?.critMultiplier || 100.0;
+    const minDurGlobal = (activeMode === 'classic' ? classicConfig?.minDuration : null)
+      || bossConfig?.rules?.minDurationMinutes
+      || classicConfig?.minDuration
+      || gameState?.summary?.minDurationMinutes
+      || 30.0;
 
     (activitiesData || []).forEach(a => {
       const actId = String(a.id);
-      const hero = heroMap[a.hero] || { maxHr: 185, guild: '自由英雄' };
+      const hero = heroMap[a.hero] || { maxHr: 185, guild: '自由英雄', rpgClass: '狂戰士' };
       const actDate = parseActivityDate(a.date);
       const inSeason = actDate ? (actDate >= seasonStartDate && actDate <= seasonEndDate) : true;
       const isExcluded = Boolean(a.is_excluded);
@@ -461,7 +517,6 @@ async function syncFromDatabase() {
       const maxHr = cleanNumber(a.max_hr);
       const calories = cleanNumber(a.calories);
 
-      const minDurGlobal = gameState?.summary?.minDurationMinutes || bossConfig?.rules?.minDurationMinutes || 30.0;
       const isValid = (duration >= minDurGlobal) && inSeason && !isExcluded;
       let physDmg = 0;
       let magDmg = 0;
@@ -491,6 +546,18 @@ async function syncFromDatabase() {
       }
 
       const singleCritDmg = Math.round(gap * critMult);
+      const density = duration > 0 ? (suffer / duration) : 0;
+      let actCombatPower = 0;
+      if (isValid) {
+        if (hero.rpgClass === '狂戰士') actCombatPower = Math.round((gap * 50) + (gap * 8) + (calories * 0.6));
+        else if (hero.rpgClass === '聖騎士') actCombatPower = Math.round(150 + (suffer * 1.5) + (duration * 1.0));
+        else if (hero.rpgClass === '遊俠') actCombatPower = Math.round((isZone2 ? 120 : 0) + (calories * 1.2) + (duration * 1.5));
+        else if (hero.rpgClass === '大法師') actCombatPower = Math.round((trimp * 25) + (duration * 2.0));
+        else if (hero.rpgClass === '刺客') actCombatPower = Math.round((density * 1200) + (gap * 40) + (calories * 0.8));
+        else actCombatPower = Math.round((calories * 1.0) + (trimp * 15));
+      }
+
+      const actTitle = a.name || a.title || '鍛鍊';
 
       activities.push({
         id: actId,
@@ -498,7 +565,8 @@ async function syncFromDatabase() {
         date: a.date,
         time: a.date,
         type: a.type || 'Workout',
-        name: a.name || '鍛鍊',
+        name: actTitle,
+        title: actTitle,
         duration: duration,
         distance: distance,
         elevation: elevation,
@@ -517,16 +585,24 @@ async function syncFromDatabase() {
         isValidAttack: isValid,
         inSeason: inSeason,
         damage: isValid ? (physDmg + magDmg) : 0,
+        combatPower: actCombatPower,
         physDmg: physDmg,
         magDmg: magDmg,
         critDmg: singleCritDmg
       });
     });
 
+    // Sort all activities chronologically (newest first)
+    activities.sort((a, b) => {
+      const ta = parseActivityDate(a.date || a.time)?.getTime() || 0;
+      const tb = parseActivityDate(b.date || b.time)?.getTime() || 0;
+      return tb - ta;
+    });
+
     // 5. Build Hero Stats List (取單次最大 Gap 作為賽季爆擊傷害，並完整累計至總傷害)
     const heroStatsList = heroes.map(h => {
       const heroActs = activities.filter(a => a.hero === h.name && !a.isExcluded);
-      const inSeasonActs = heroActs.filter(a => a.inSeason);
+      const validSeasonActs = heroActs.filter(a => a.isValidAttack);
       const agg = heroAggregates[h.name] || { physDmg: 0, magDmg: 0, maxGap: 0, validCount: 0 };
       
       // 爆擊傷害：取賽季中單次最大 Gap * critMultiplier (100)
@@ -549,11 +625,11 @@ async function syncFromDatabase() {
         critDmg: heroCritDmg,
         maxGap: agg.maxGap,
         validWorkouts: agg.validCount,
-        totalDuration: inSeasonActs.reduce((s, a) => s + (a.duration || 0), 0),
-        totalCalories: inSeasonActs.reduce((s, a) => s + (a.calories || 0), 0),
-        totalTrimp: inSeasonActs.reduce((s, a) => s + (a.trimp || 0), 0),
-        totalElevation: inSeasonActs.reduce((s, a) => s + (a.elevation || 0), 0),
-        zone2Count: inSeasonActs.filter(a => a.isZone2).length
+        totalDuration: validSeasonActs.reduce((s, a) => s + (a.duration || 0), 0),
+        totalCalories: validSeasonActs.reduce((s, a) => s + (a.calories || 0), 0),
+        totalTrimp: validSeasonActs.reduce((s, a) => s + (a.trimp || 0), 0),
+        totalElevation: validSeasonActs.reduce((s, a) => s + (a.elevation || 0), 0),
+        zone2Count: validSeasonActs.filter(a => a.isZone2).length
       };
     });
 
@@ -584,6 +660,11 @@ async function syncFromDatabase() {
     const classicStats = calculateLiveClassicStats({ heroes, guilds, activities: activities.filter(a => a.isValidAttack) });
     const rpgStats = calculateLiveRPGStats({ heroes, guilds, activities: activities.filter(a => a.isValidAttack) });
 
+    // Attach RPG combatPower onto heroStatsList
+    const rpgMapByName = {};
+    (rpgStats.heroRpgList || []).forEach(r => { rpgMapByName[r.name] = r.combatPower || 0; });
+    heroStatsList.forEach(h => { h.combatPower = rpgMapByName[h.name] || 0; });
+
     const liveClassic = { ...classicConfig, ...classicStats, seasonStart: seasonStartStr, seasonEnd: seasonEndStr };
     const liveRpg = { ...rpgConfig, ...rpgStats, seasonStart: seasonStartStr, seasonEnd: seasonEndStr };
     const liveBoss = {
@@ -606,6 +687,11 @@ async function syncFromDatabase() {
       boss: liveBoss,
       classic: liveClassic,
       rpg: liveRpg,
+      faction: factionConfig,
+      survival: survivalConfig,
+      base: baseConfig,
+      bingo: bingoConfig,
+      excludeKeywords: excludeKeywords,
       guilds: guilds,
       heroes: heroes,
       activities: activities,
@@ -614,6 +700,7 @@ async function syncFromDatabase() {
       archivedSeasons: snapshots,
       classic0717: gameState?.classic0717 || window.frozenClassic0717,
       summary: {
+        minDurationMinutes: minDurGlobal,
         totalPhys: totalSeasonPhys,
         totalMag: totalSeasonMag,
         totalCrit: totalSeasonCrit,

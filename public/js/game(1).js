@@ -263,40 +263,28 @@ window.frozenClassic0717 = {
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
-  if (typeof window.syncFromDatabase === 'function') {
-    await window.syncFromDatabase();
-  }
-  if (!window.gameState) {
-    await fetchGameData();
-  } else {
-    gameState = window.gameState;
-  }
+  await fetchGameData();
   initRealtimeSSE();
+  syncFromGoogleSheet();
   renderAllGameViews();
   if (window.lucide) lucide.createIcons();
 });
 
 async function fetchGameData() {
-  if (window.gameState) {
-    gameState = window.gameState;
-    setupImmersiveNavigation(gameState.activeMode || 'world_boss');
-    return;
-  }
   try {
     const res = await fetch('/api/state');
-    if (res.ok && !window.gameState) {
+    if (res.ok) {
       gameState = await res.json();
     }
   } catch (e) {}
 
-  if (!gameState && !window.gameState) {
+  if (!gameState) {
     try {
       const fb = await fetch('/data/game_data.json');
-      if (fb.ok && !window.gameState) gameState = await fb.json();
+      if (fb.ok) gameState = await fb.json();
     } catch(e) {}
   }
 
-  if (window.gameState) gameState = window.gameState;
   const effectiveMode = gameState?.activeMode || 'world_boss';
   if (gameState) gameState.activeMode = effectiveMode;
   setupImmersiveNavigation(effectiveMode);
@@ -2765,15 +2753,11 @@ function renderBaseBuilderView() {
   // Level thresholds (configurable via GM panel or default 10k/500/500)
   const getLevel = (wood, steel, mana) => {
       let lvl = 1;
-      const baseW = Number(gameState?.base?.woodTarget) || 10000;
-      const baseS = Number(gameState?.base?.steelTarget) || 500;
-      const baseM = Number(gameState?.base?.manaTarget) || 500;
-      let wReq = baseW, sReq = baseS, mReq = baseM;
-      const wStep = Math.max(100, Math.round(baseW * 1.5));
-      const sStep = Math.max(50, Math.round(baseS * 1.5));
-      const mStep = Math.max(50, Math.round(baseM * 1.5));
+      let wReq = gameState?.base?.woodTarget || 10000;
+      let sReq = gameState?.base?.steelTarget || 500;
+      let mReq = gameState?.base?.manaTarget || 500;
       while (wood >= wReq && steel >= sReq && mana >= mReq && lvl < 10) {
-          lvl++; wReq += wStep; sReq += sStep; mReq += mStep;
+          lvl++; wReq+=15000; sReq+=750; mReq+=750;
       }
       return { lvl, nW: wReq, nS: sReq, nM: mReq };
   };

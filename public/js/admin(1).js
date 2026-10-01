@@ -122,15 +122,7 @@ const RPG_CLASSES = {
 
 document.addEventListener('DOMContentLoaded', async () => {
   checkGMAuth();
-  if (typeof window.syncFromDatabase === 'function') {
-    await window.syncFromDatabase();
-  }
-  if (!window.gameState || !window.gameState.heroes || window.gameState.heroes.length === 0) {
-    await fetchAdminData();
-  } else {
-    gameState = window.gameState;
-    allActivitiesCache = gameState?.activities || [];
-  }
+  await fetchAdminData();
   await fetchCrawlerConfig();
   populateGlobalSettings();
   populateFormDropdowns();
@@ -198,14 +190,9 @@ const EMBEDDED_DEFAULT_STATE = {
 };
 
 async function fetchAdminData() {
-  if (window.gameState && window.gameState.heroes && window.gameState.heroes.length > 0) {
-    gameState = window.gameState;
-    allActivitiesCache = gameState?.activities || [];
-    return;
-  }
   try {
     const res = await fetch("/api/state");
-    if (res.ok && !window.gameState) {
+    if (res.ok) {
       gameState = await res.json();
     } else {
       throw new Error("Local API offline");
@@ -213,14 +200,10 @@ async function fetchAdminData() {
   } catch (e) {
     try {
       const fbRes = await fetch("/data/game_data.json");
-      if (fbRes.ok && !window.gameState) {
+      if (fbRes.ok) {
         gameState = await fbRes.json();
       }
     } catch (err) {}
-  }
-
-  if (window.gameState) {
-    gameState = window.gameState;
   }
 
   if (!gameState) {
@@ -237,6 +220,22 @@ async function fetchAdminData() {
   allActivitiesCache = gameState?.activities || [];
   if (!gameState.snapshots && gameState.archivedSeasons) {
     gameState.snapshots = gameState.archivedSeasons;
+  }
+
+  // If sheetSync is available, trigger background Google Sheet synchronization
+  if (typeof syncFromGoogleSheet === "function") {
+    try {
+      syncFromGoogleSheet().then(() => {
+        if (window.gameState) {
+          gameState = window.gameState;
+          allActivitiesCache = gameState?.activities || [];
+          populateGlobalSettings();
+          populateFormDropdowns();
+          renderHeroTable();
+          renderActivityTable();
+        }
+      }).catch(err => {});
+    } catch(err) {}
   }
 }
 
@@ -265,11 +264,8 @@ function populateGlobalSettings() {
   if (sStart) sStart.value = dateToInputVal(startVal);
   if (sEnd) sEnd.value = dateToInputVal(endVal);
 
-  const minDurVal = gameState.summary?.minDurationMinutes || gameState.boss?.rules?.minDurationMinutes || gameState.classic?.minDuration || 30;
-  const globalMinDur = document.getElementById('cfg-global-min-dur');
   const classicMinDur = document.getElementById('cfg-classic-min-dur');
-  if (globalMinDur) globalMinDur.value = minDurVal;
-  if (classicMinDur) classicMinDur.value = minDurVal;
+  if (classicMinDur) classicMinDur.value = gameState.classic?.minDuration || gameState.summary?.minDurationMinutes || 30;
 
   if (gameState.faction) {
     const f1El = document.getElementById('cfg-faction1-name');
@@ -408,102 +404,43 @@ function onExpansionModeChanged() {
   if (window.lucide) lucide.createIcons();
 }
 
-async function syncAllSettingsToSupabase(customMsg) {
-  const activeMode = document.getElementById('cfg-active-mode')?.value || gameState?.activeMode || 'world_boss';
-  const startRaw = document.getElementById('cfg-season-start')?.value || '';
-  const endRaw = document.getElementById('cfg-season-end')?.value || '';
+async function saveGlobalGameSettings() {
+  const activeMode = document.getElementById('cfg-active-mode').value;
+  const startRaw = document.getElementById('cfg-season-start').value;
+  const endRaw = document.getElementById('cfg-season-end').value;
 
-  const seasonStart = inputValToDate(startRaw) || gameState?.seasonStart || '2026/08/12';
-  const seasonEnd = inputValToDate(endRaw) || gameState?.seasonEnd || '2026/08/31';
+  const seasonStart = inputValToDate(startRaw) || '2026/08/12';
+  const seasonEnd = inputValToDate(endRaw) || '2026/08/31';
 
-  const globalMinDurEl = document.getElementById('cfg-global-min-dur');
-  const classicMinDurEl = document.getElementById('cfg-classic-min-dur');
-  const minDur = parseFloat(globalMinDurEl?.value || classicMinDurEl?.value) || 30.0;
-  if (globalMinDurEl) globalMinDurEl.value = minDur;
-  if (classicMinDurEl) classicMinDurEl.value = minDur;
-
-  // Boss Config
   const bossConfig = gameState?.boss || {};
-  const bossName = document.getElementById('cfg-boss-name')?.value?.trim();
-  const bossMaxHp = parseInt(document.getElementById('cfg-boss-maxhp')?.value);
-  const magMult = parseFloat(document.getElementById('cfg-mag-mult')?.value) || 15.0;
-  if (bossName) bossConfig.name = bossName;
-  if (bossMaxHp > 0) bossConfig.maxHp = bossMaxHp;
-  delete bossConfig.currentHp;
   bossConfig.seasonStart = seasonStart;
   bossConfig.seasonEnd = seasonEnd;
-  if (!bossConfig.rules) bossConfig.rules = {};
-  bossConfig.rules.minDurationMinutes = minDur;
-  bossConfig.rules.magicMultiplier = magMult;
 
-  // Classic & RPG Config
   const classicConfig = gameState?.classic || {};
   classicConfig.seasonStart = seasonStart;
   classicConfig.seasonEnd = seasonEnd;
-  classicConfig.minDuration = minDur;
 
   const rpgConfig = gameState?.rpg || {};
   rpgConfig.seasonStart = seasonStart;
   rpgConfig.seasonEnd = seasonEnd;
 
-  // Expansion 4: Faction Config
-  const factionConfig = {
-    f1Name: document.getElementById('cfg-faction1-name')?.value || gameState?.faction?.f1Name || '🟢 均衡聯盟',
-    f2Name: document.getElementById('cfg-faction2-name')?.value || gameState?.faction?.f2Name || '🔴 狂怒部落',
-    baseHp: parseInt(document.getElementById('cfg-faction-basehp')?.value) || gameState?.faction?.baseHp || 500000
-  };
-
-  // Expansion 5: Survival Config
-  const survivalConfig = {
-    maxHp: parseInt(document.getElementById('cfg-survival-maxhp')?.value) || gameState?.survival?.maxHp || 10000,
-    decayPerDay: parseInt(document.getElementById('cfg-survival-decay')?.value) || gameState?.survival?.decayPerDay || 500
-  };
-
-  // Expansion 6: Base Builder Config
-  const baseConfig = {
-    woodTarget: parseInt(document.getElementById('cfg-base-wood')?.value) || gameState?.base?.woodTarget || 10000,
-    steelTarget: parseInt(document.getElementById('cfg-base-steel')?.value) || gameState?.base?.steelTarget || 500,
-    manaTarget: parseInt(document.getElementById('cfg-base-mana')?.value) || gameState?.base?.manaTarget || 500
-  };
-
-  // Expansion 7: Bingo Config
-  const bingoConfig = {
-    multiplier: parseFloat(document.getElementById('cfg-bingo-multiplier')?.value) || gameState?.bingo?.multiplier || 1.0
-  };
-
-  await Promise.all([
-    window.supabase.insert("game_config", { key: "active_mode", value: activeMode }),
-    window.supabase.insert("game_config", { key: "boss_config", value: bossConfig }),
-    window.supabase.insert("game_config", { key: "classic_config", value: classicConfig }),
-    window.supabase.insert("game_config", { key: "rpg_config", value: rpgConfig }),
-    window.supabase.insert("game_config", { key: "faction_config", value: factionConfig }),
-    window.supabase.insert("game_config", { key: "survival_config", value: survivalConfig }),
-    window.supabase.insert("game_config", { key: "base_config", value: baseConfig }),
-    window.supabase.insert("game_config", { key: "bingo_config", value: bingoConfig })
-  ]);
-
-  if (gameState) {
-    gameState.activeMode = activeMode;
-    gameState.seasonStart = seasonStart;
-    gameState.seasonEnd = seasonEnd;
-    gameState.boss = bossConfig;
-    gameState.classic = classicConfig;
-    gameState.rpg = rpgConfig;
-    gameState.faction = factionConfig;
-    gameState.survival = survivalConfig;
-    gameState.base = baseConfig;
-    gameState.bingo = bingoConfig;
-  }
-
-  if (window.syncFromDatabase) await window.syncFromDatabase();
-  alert(customMsg || `🎉 資料片模式【${getModeLabel(activeMode)}】與所有遊戲條件參數已成功同步寫入 Supabase！前台看板立即生效！`);
-  showAdminToast("✅ 賽事核心參數與資料片條件已成功儲存至雲端！");
-  onExpansionModeChanged();
-}
-
-async function saveGlobalGameSettings() {
   try {
-    await syncAllSettingsToSupabase();
+    await Promise.all([
+      window.supabase.insert("game_config", { key: "active_mode", value: activeMode }),
+      window.supabase.insert("game_config", { key: "boss_config", value: bossConfig }),
+      window.supabase.insert("game_config", { key: "classic_config", value: classicConfig }),
+      window.supabase.insert("game_config", { key: "rpg_config", value: rpgConfig })
+    ]);
+
+    if (gameState) {
+      gameState.activeMode = activeMode;
+      gameState.seasonStart = seasonStart;
+      gameState.seasonEnd = seasonEnd;
+    }
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    alert(`🎉 資料片模式已成功切換為【${getModeLabel(activeMode)}】並同步寫入 Supabase！全伺服器玩家立即生效！`);
+    showAdminToast("✅ 賽事核心參數已成功儲存至雲端！");
+    onExpansionModeChanged();
   } catch (e) {
     console.error("Save Global Settings Error:", e);
     alert("❌ 儲存至雲端資料庫異常：" + e.message);
@@ -1045,11 +982,13 @@ async function handleManualAttack(e) {
 
 async function saveClassicSettings() {
   const minDur = parseFloat(document.getElementById('cfg-classic-min-dur')?.value) || 30;
-  const globalMinDurEl = document.getElementById('cfg-global-min-dur');
-  if (globalMinDurEl) globalMinDurEl.value = minDur;
+  const classicConfig = gameState?.classic || {};
+  classicConfig.minDuration = minDur;
 
   try {
-    await syncAllSettingsToSupabase('✅ 經典競技參數與資料片模式已成功儲存至 Supabase 雲端資料庫！');
+    await window.supabase.insert("game_config", { key: "classic_config", value: classicConfig });
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    alert('✅ 經典競技參數已成功儲存至 Supabase 雲端資料庫！');
   } catch (e) {
     console.error("Save Classic Settings Error:", e);
     alert("❌ 儲存失敗：" + e.message);
@@ -1057,8 +996,23 @@ async function saveClassicSettings() {
 }
 
 async function saveBossSettings() {
+  const name = document.getElementById('cfg-boss-name')?.value?.trim() || '世界 Boss';
+  const maxHp = parseInt(document.getElementById('cfg-boss-maxhp')?.value) || 350000;
+  const minDur = parseFloat(document.getElementById('cfg-min-dur')?.value || document.getElementById('cfg-classic-min-dur')?.value) || 30.0;
+  const magMult = parseFloat(document.getElementById('cfg-mag-mult')?.value) || 15.0;
+
+  const bossConfig = gameState?.boss || {};
+  bossConfig.name = name;
+  bossConfig.maxHp = maxHp;
+  delete bossConfig.currentHp;
+  if (!bossConfig.rules) bossConfig.rules = {};
+  bossConfig.rules.minDurationMinutes = minDur;
+  bossConfig.rules.magicMultiplier = magMult;
+
   try {
-    await syncAllSettingsToSupabase('✅ 世界 Boss 血量與討伐參數已成功更新至 Supabase 雲端資料庫！前台看板立即生效！');
+    await window.supabase.insert("game_config", { key: "boss_config", value: bossConfig });
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    alert('✅ 世界 Boss 數值與參數已成功更新至 Supabase 雲端資料庫！');
   } catch (e) {
     console.error('Save boss settings error:', e);
     alert("❌ 儲存失敗：" + e.message);
@@ -1608,32 +1562,62 @@ function downloadCrawlerConfigJSON() {
 }
 
 async function saveFactionSettings() {
+  const f1 = document.getElementById('cfg-faction1-name').value;
+  const f2 = document.getElementById('cfg-faction2-name').value;
+  const hp = parseInt(document.getElementById('cfg-faction-basehp').value) || 500000;
+  
+  if (!gameState) gameState = {};
+  gameState.faction = { f1Name: f1, f2Name: f2, baseHp: hp };
+  
   try {
-    await syncAllSettingsToSupabase("🎉 雙城激戰陣營參數與資料片設定已儲存並同步至雲端！前台看板立即生效！");
+    await window.supabase.insert("game_config", { key: "faction_config", value: gameState.faction });
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    alert("🎉 雙城激戰參數已儲存並同步至雲端！");
   } catch (e) {
     alert("儲存失敗: " + e.message);
   }
 }
 
 async function saveSurvivalSettings() {
+  const maxHp = parseInt(document.getElementById('cfg-survival-maxhp').value) || 10000;
+  const decay = parseInt(document.getElementById('cfg-survival-decay').value) || 500;
+  if (!gameState) gameState = {};
+  gameState.survival = { maxHp, decayPerDay: decay };
+  
   try {
-    await syncAllSettingsToSupabase("🎉 飢餓法則生存參數與資料片設定已儲存並同步至雲端！前台看板立即生效！");
+    await window.supabase.insert("game_config", { key: "survival_config", value: gameState.survival });
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    alert("🎉 飢餓法則參數已儲存並同步至雲端！");
   } catch (e) {
     alert("儲存失敗: " + e.message);
   }
 }
 
 async function saveBaseSettings() {
+  const wood = parseInt(document.getElementById('cfg-base-wood').value) || 10000;
+  const steel = parseInt(document.getElementById('cfg-base-steel').value) || 500;
+  const mana = parseInt(document.getElementById('cfg-base-mana').value) || 500;
+  if (!gameState) gameState = {};
+  gameState.base = { woodTarget: wood, steelTarget: steel, manaTarget: mana };
+  
   try {
-    await syncAllSettingsToSupabase("🎉 鋼鐵要塞資源門檻與資料片設定已儲存並同步至雲端！前台看板立即生效！");
+    await window.supabase.insert("game_config", { key: "base_config", value: gameState.base });
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    alert("🎉 鋼鐵要塞參數已儲存並同步至雲端！");
   } catch (e) {
     alert("儲存失敗: " + e.message);
   }
 }
 
 async function saveBingoSettings() {
+  const mult = parseFloat(document.getElementById('cfg-bingo-multiplier').value) || 1.0;
+  if (!gameState) gameState = {};
+  gameState.bingo = { multiplier: mult };
+  
   try {
-    await syncAllSettingsToSupabase("🎉 戰神拼圖難度倍率與資料片設定已儲存並同步至雲端！前台看板立即生效！");
+    await window.supabase.insert("game_config", { key: "bingo_config", value: gameState.bingo });
+    if (window.syncFromDatabase) await window.syncFromDatabase();
+    alert("🎉 戰神拼圖參數已儲存並同步至雲端！");
   } catch (e) {
     alert("儲存失敗: " + e.message);
   }
