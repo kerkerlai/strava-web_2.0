@@ -181,10 +181,10 @@
         </div>
 
         <form id="form-manual-entry" onsubmit="handleManualAttack(event)" class="space-y-4">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">冒險者英雄 *</label>
-              <select id="inp-hero" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-amber-500 outline-none" required>
+              <select id="inp-hero" onchange="previewDamageCalculation()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-amber-500 outline-none" required>
               </select>
             </div>
 
@@ -197,6 +197,11 @@
                 <option value="Ride">Ride (自行車騎乘)</option>
                 <option value="Swim">Swim (游泳)</option>
               </select>
+            </div>
+
+            <div>
+              <label class="text-xs font-bold text-slate-300 block mb-1">運動日期 (可回溯補登)</label>
+              <input type="date" id="inp-date" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white font-mono focus:border-amber-500 outline-none">
             </div>
           </div>
 
@@ -307,11 +312,11 @@
 
             <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1 text-[11px] text-slate-400">
               <p class="font-bold text-slate-200">✨ 五大天賦被動：</p>
-              <p>• 狂戰士：無氧落差 Gap +30%</p>
-              <p>• 聖騎士：出勤 ×150 + Suffer ×1.5</p>
-              <p>• 遊俠：Zone 2 次數 ×120 + 熱量 +35%</p>
-              <p>• 大法師：TRIMP 衝力 × 1.5 倍增幅</p>
-              <p>• 刺客：訓練密度 Density × 2.0 倍</p>
+              <p>• 狂戰士：賽季巔峰落差 ×50 + 單次落差 ×8 + 熱量 ×0.6</p>
+              <p>• 聖騎士：有效出勤 ×200 + 總時長 ×3.5</p>
+              <p>• 遊俠：Zone 2 次數 ×180 + 熱量 ×1.2</p>
+              <p>• 大法師：TRIMP 衝力 ×12 + 熱量 ×0.5</p>
+              <p>• 刺客：單次平均熱量 ×5 + 單次平均衝力 ×25</p>
             </div>
           </div>
         </div>
@@ -586,9 +591,15 @@
 
       <div class="space-y-3 text-xs">
         <input type="hidden" id="act-edit-id">
-        <div>
-          <label class="font-bold text-slate-300 block mb-1">運動名稱 / 標題</label>
-          <input type="text" id="act-edit-title" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-amber-500">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-bold text-slate-300 block mb-1">運動名稱 / 標題</label>
+            <input type="text" id="act-edit-title" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-amber-500">
+          </div>
+          <div>
+            <label class="font-bold text-slate-300 block mb-1">運動日期</label>
+            <input type="date" id="act-edit-date" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-amber-500">
+          </div>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
@@ -624,7 +635,7 @@
   <script src="/js/admin.js"></script>
   <script>
     if (window.lucide) lucide.createIcons();
-  </script></div>
+  </script>
 
 
   <!-- GM Authentication Gatekeeper Overlay (密碼保護: 800402) -->

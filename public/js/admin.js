@@ -113,11 +113,11 @@ let gameState = null;
 let allActivitiesCache = [];
 
 const RPG_CLASSES = {
-  '狂戰士': { badge: '⚔️', name: '狂戰士', color: '#ef4444', desc: '無氧落差 +30%' },
-  '聖騎士': { badge: '🛡️', name: '聖騎士', color: '#eab308', desc: '出勤×150 + Suffer×1.5' },
-  '遊俠':   { badge: '🏹', name: '遊俠',   color: '#10b981', desc: 'Zone2次數×120 + 熱量+35%' },
-  '大法師': { badge: '🧙', name: '大法師', color: '#06b6d4', desc: 'TRIMP×1.5倍奧術增幅' },
-  '刺客':   { badge: '🗡️', name: '刺客',   color: '#a855f7', desc: '密度×2.0倍暗影加成' }
+  '狂戰士': { badge: '⚔️', name: '狂戰士', color: '#ef4444', desc: '巔峰落差×50 + 單次落差×8 + 熱量×0.6' },
+  '聖騎士': { badge: '🛡️', name: '聖騎士', color: '#eab308', desc: '有效出勤×200 + 總時長×3.5' },
+  '遊俠':   { badge: '🏹', name: '遊俠',   color: '#10b981', desc: 'Zone2次數×180 + 熱量×1.2' },
+  '大法師': { badge: '🧙', name: '大法師', color: '#06b6d4', desc: 'TRIMP×12 + 熱量×0.5' },
+  '刺客':   { badge: '🗡️', name: '刺客',   color: '#a855f7', desc: '單次平均熱量×5 + 單次平均衝力×25' }
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -359,12 +359,12 @@ function onExpansionModeChanged() {
 
   if (mode === 'classic') {
     if (formTitle) formTitle.innerText = '🏋️ 登錄經典競技訓練';
-    if (formSub) formSub.innerText = '登錄有效運動 (滿30分)，自動試算有氧/無氧指標並計入公會積分';
+    if (formSub) formSub.innerText = '登錄有效運動，自動試算有氧/無氧指標並計入公會積分';
     if (btnSubmitText) btnSubmitText.innerText = '登錄訓練並計入經典競技積分';
     if (lbl1) lbl1.innerText = '🔋 燃脂熱量 (kcal)';
     if (lbl2) lbl2.innerText = '🚀 訓練衝力 (TRIMP)';
     if (lbl3) lbl3.innerText = '🦍 無氧落差 (Gap)';
-    if (lbl4) lbl4.innerText = '📊 100分制加權試算';
+    if (lbl4) lbl4.innerText = '📊 綜合試算指標';
   } else if (mode === 'rpg_talent') {
     if (formTitle) formTitle.innerText = '⚔️ 登錄英雄修煉打卡';
     if (formSub) formSub.innerText = '鍛鍊數據套用英雄職業被動天賦，轉化為 RPG 戰鬥評分 (CP)';
@@ -372,7 +372,39 @@ function onExpansionModeChanged() {
     if (lbl1) lbl1.innerText = '🔥 基礎能量';
     if (lbl2) lbl2.innerText = '⚡ 奧術衝力';
     if (lbl3) lbl3.innerText = '✨ 專精天賦加成';
-    if (lbl4) lbl4.innerText = '⚡ RPG 戰鬥評分 (CP)';
+    if (lbl4) lbl4.innerText = '⚡ 單次戰力 (CP)';
+  } else if (mode === 'faction_war') {
+    if (formTitle) formTitle.innerText = '🏰 登錄陣營攻防戰行動';
+    if (formSub) formSub.innerText = '無氧衝力與落差化為攻城砲火，有氧與 Zone2 化為城牆修復值';
+    if (btnSubmitText) btnSubmitText.innerText = '發動陣營攻城與修復行動';
+    if (lbl1) lbl1.innerText = '🔥 攻城傷害';
+    if (lbl2) lbl2.innerText = '🛠️ 城牆修復';
+    if (lbl3) lbl3.innerText = '🟢 Zone2 判定';
+    if (lbl4) lbl4.innerText = '🏰 戰略總貢獻';
+  } else if (mode === 'survival') {
+    if (formTitle) formTitle.innerText = '🍖 登錄荒野狩獵與搜刮';
+    if (formSub) formSub.innerText = '燃燒熱量補充生命，引擎衝力搜刮荒野物資抵抗每日毒圈衰減';
+    if (btnSubmitText) btnSubmitText.innerText = '登錄狩獵並補充荒野生存 HP';
+    if (lbl1) lbl1.innerText = '🍖 狩獵補血 (Cal)';
+    if (lbl2) lbl2.innerText = '🎒 搜刮物資 (TRIMP×1.5)';
+    if (lbl3) lbl3.innerText = '🦍 落差 (Gap)';
+    if (lbl4) lbl4.innerText = '❤️ 總回復 HP';
+  } else if (mode === 'base_builder') {
+    if (formTitle) formTitle.innerText = '🔨 登錄要塞資源採集';
+    if (formSub) formSub.innerText = '全服協力採集木材、鋼鐵與魔法原石，升級鐵峰堡壘';
+    if (btnSubmitText) btnSubmitText.innerText = '登錄採集並貢獻要塞資源';
+    if (lbl1) lbl1.innerText = '🌳 木材 (Cal)';
+    if (lbl2) lbl2.innerText = '⚙️ 鋼鐵 (TRIMP)';
+    if (lbl3) lbl3.innerText = '🔮 魔法石 (Gap+Z2)';
+    if (lbl4) lbl4.innerText = '🏰 資源總產量';
+  } else if (mode === 'bingo') {
+    if (formTitle) formTitle.innerText = '🧩 登錄戰神拼圖解題訓練';
+    if (formSub) formSub.innerText = '精準達成九宮格石板條件（滿60分、Zone2、高落差、高熱量）';
+    if (btnSubmitText) btnSubmitText.innerText = '登錄訓練並推進九宮格石板';
+    if (lbl1) lbl1.innerText = '🔥 燃燒熱量';
+    if (lbl2) lbl2.innerText = '⚙️ 引擎衝力 (TRIMP)';
+    if (lbl3) lbl3.innerText = '💥 心率落差 (Gap)';
+    if (lbl4) lbl4.innerText = '🧩 解鎖指標數';
   } else {
     if (formTitle) formTitle.innerText = '⚔️ 手動打卡發動討伐攻擊';
     if (formSub) formSub.innerText = '鍛鍊數據轉化為 3 大傷害體系，即時扣除 Boss 血量';
@@ -396,6 +428,22 @@ function onExpansionModeChanged() {
     if (rosterTitle) rosterTitle.innerText = '👥 冒險者名冊與天賦職業配置 (RPG 專精)';
     if (btnRandom) btnRandom.classList.remove('hidden');
     if (thClass) thClass.innerText = '⚔️ RPG 天賦職業';
+  } else if (mode === 'faction_war') {
+    if (rosterTitle) rosterTitle.innerText = '👥 陣營傭兵名冊與公會編制 (雙城激戰)';
+    if (btnRandom) btnRandom.classList.add('hidden');
+    if (thClass) thClass.innerText = '🏰 所屬陣營部隊';
+  } else if (mode === 'survival') {
+    if (rosterTitle) rosterTitle.innerText = '👥 荒野求生者名冊 (飢餓法則)';
+    if (btnRandom) btnRandom.classList.add('hidden');
+    if (thClass) thClass.innerText = '☠️ 求生者身分';
+  } else if (mode === 'base_builder') {
+    if (rosterTitle) rosterTitle.innerText = '👥 要塞工程隊名冊 (鋼鐵要塞)';
+    if (btnRandom) btnRandom.classList.add('hidden');
+    if (thClass) thClass.innerText = '🔨 工程隊職務';
+  } else if (mode === 'bingo') {
+    if (rosterTitle) rosterTitle.innerText = '👥 遺跡解謎遠征隊名冊 (戰神拼圖)';
+    if (btnRandom) btnRandom.classList.add('hidden');
+    if (thClass) thClass.innerText = '🧩 遠征隊成員';
   } else {
     if (rosterTitle) rosterTitle.innerText = '👥 討伐軍名冊與先鋒部隊 (世界 Boss)';
     if (btnRandom) btnRandom.classList.add('hidden');
@@ -409,6 +457,11 @@ function onExpansionModeChanged() {
 }
 
 async function syncAllSettingsToSupabase(customMsg) {
+  if (window.dbSyncHealthy === false) {
+    if (!confirm("⚠️ 目前雲端資料庫連線異常，強制寫入可能會以預設值覆蓋雲端設定。確定仍要覆寫嗎？")) {
+      return;
+    }
+  }
   const activeMode = document.getElementById('cfg-active-mode')?.value || gameState?.activeMode || 'world_boss';
   const startRaw = document.getElementById('cfg-season-start')?.value || '';
   const endRaw = document.getElementById('cfg-season-end')?.value || '';
@@ -445,30 +498,63 @@ async function syncAllSettingsToSupabase(customMsg) {
   const rpgConfig = gameState?.rpg || {};
   rpgConfig.seasonStart = seasonStart;
   rpgConfig.seasonEnd = seasonEnd;
+  rpgConfig.minDuration = minDur;
 
   // Expansion 4: Faction Config
   const factionConfig = {
     f1Name: document.getElementById('cfg-faction1-name')?.value || gameState?.faction?.f1Name || '🟢 均衡聯盟',
     f2Name: document.getElementById('cfg-faction2-name')?.value || gameState?.faction?.f2Name || '🔴 狂怒部落',
-    baseHp: parseInt(document.getElementById('cfg-faction-basehp')?.value) || gameState?.faction?.baseHp || 500000
+    baseHp: parseInt(document.getElementById('cfg-faction-basehp')?.value) || gameState?.faction?.baseHp || 500000,
+    seasonStart: seasonStart,
+    seasonEnd: seasonEnd,
+    minDuration: minDur
   };
 
-  // Expansion 5: Survival Config
+  // Expansion 5: Survival Config (preserve past days' decay if decayPerDay is modified mid-season)
+  const prevSurvival = gameState?.survival || {};
+  const newMaxHp = parseInt(document.getElementById('cfg-survival-maxhp')?.value) || prevSurvival.maxHp || 10000;
+  const newDecayPerDay = parseInt(document.getElementById('cfg-survival-decay')?.value) || prevSurvival.decayPerDay || 500;
+  let decayBasePenalty = Number(prevSurvival.decayBasePenalty) || 0;
+  let decayUpdatedDate = prevSurvival.decayUpdatedDate || null;
+
+  const prevStart = prevSurvival.seasonStart || gameState?.seasonStart || seasonStart;
+  if (prevStart !== seasonStart) {
+    // New season start resets segmented decay
+    decayBasePenalty = 0;
+    decayUpdatedDate = null;
+  } else if (prevSurvival.decayPerDay !== undefined && Number(prevSurvival.decayPerDay) !== newDecayPerDay && window.computeHeroSurvival) {
+    const curSurv = window.computeHeroSurvival({}, gameState);
+    decayBasePenalty = curSurv.currentPenalty;
+    const now = new Date();
+    decayUpdatedDate = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
+  }
+
   const survivalConfig = {
-    maxHp: parseInt(document.getElementById('cfg-survival-maxhp')?.value) || gameState?.survival?.maxHp || 10000,
-    decayPerDay: parseInt(document.getElementById('cfg-survival-decay')?.value) || gameState?.survival?.decayPerDay || 500
+    maxHp: newMaxHp,
+    decayPerDay: newDecayPerDay,
+    decayBasePenalty: decayBasePenalty,
+    decayUpdatedDate: decayUpdatedDate,
+    seasonStart: seasonStart,
+    seasonEnd: seasonEnd,
+    minDuration: minDur
   };
 
   // Expansion 6: Base Builder Config
   const baseConfig = {
     woodTarget: parseInt(document.getElementById('cfg-base-wood')?.value) || gameState?.base?.woodTarget || 10000,
     steelTarget: parseInt(document.getElementById('cfg-base-steel')?.value) || gameState?.base?.steelTarget || 500,
-    manaTarget: parseInt(document.getElementById('cfg-base-mana')?.value) || gameState?.base?.manaTarget || 500
+    manaTarget: parseInt(document.getElementById('cfg-base-mana')?.value) || gameState?.base?.manaTarget || 500,
+    seasonStart: seasonStart,
+    seasonEnd: seasonEnd,
+    minDuration: minDur
   };
 
   // Expansion 7: Bingo Config
   const bingoConfig = {
-    multiplier: parseFloat(document.getElementById('cfg-bingo-multiplier')?.value) || gameState?.bingo?.multiplier || 1.0
+    multiplier: parseFloat(document.getElementById('cfg-bingo-multiplier')?.value) || gameState?.bingo?.multiplier || 1.0,
+    seasonStart: seasonStart,
+    seasonEnd: seasonEnd,
+    minDuration: minDur
   };
 
   await Promise.all([
@@ -543,6 +629,14 @@ function renderSnapshotTable() {
       typeLabel = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">⚔️ 職業天賦</span>';
     } else if (snap.type === 'world_boss' || snap.type === 'boss') {
       typeLabel = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">🐉 世界 Boss</span>';
+    } else if (snap.type === 'faction_war') {
+      typeLabel = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">🏰 雙城激戰</span>';
+    } else if (snap.type === 'survival') {
+      typeLabel = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-600/20 text-amber-400 border border-amber-600/30">☠️ 飢餓法則</span>';
+    } else if (snap.type === 'base_builder') {
+      typeLabel = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">🔨 鋼鐵要塞</span>';
+    } else if (snap.type === 'bingo') {
+      typeLabel = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30">🧩 戰神拼圖</span>';
     }
 
     const statusBadge = isVisible
@@ -636,11 +730,16 @@ function exportSingleSnapshot(snapId) {
  * 建立當前賽季 100% 完整快照 (Snapshot)
  */
 async function archiveCurrentSeason() {
-  const activeMode = gameState?.activeMode || 'classic';
+  const activeMode = document.getElementById('cfg-active-mode')?.value || gameState?.activeMode || 'classic';
+  if (gameState) gameState.activeMode = activeMode;
   const boss = gameState?.boss || {};
   let defaultTitle = '2026 S2 • 經典競技模式 (封存快照)';
   if (activeMode === 'rpg_talent' || activeMode === 'rpg') defaultTitle = '2026 S2 • RPG 職業天賦爭霸 (封存快照)';
   else if (activeMode === 'world_boss' || activeMode === 'boss') defaultTitle = `${boss.name || '世界 Boss 討伐戰'} (結算快照)`;
+  else if (activeMode === 'faction_war') defaultTitle = '2026 S2 • 雙城激戰 (結算快照)';
+  else if (activeMode === 'survival') defaultTitle = '2026 S2 • 飢餓法則 (結算快照)';
+  else if (activeMode === 'base_builder') defaultTitle = '2026 S2 • 鋼鐵要塞 (結算快照)';
+  else if (activeMode === 'bingo') defaultTitle = '2026 S2 • 戰神拼圖 (結算快照)';
 
   const customTitle = prompt('請輸入要建立的快照名稱 (Snapshot Title)：', defaultTitle);
   if (customTitle === null) return;
@@ -657,7 +756,6 @@ async function archiveCurrentSeason() {
 
     let newArchive = null;
 
-    // 1. CLASSIC MODE SNAPSHOT (直接克隆當前已運算好的經典競技完整狀態)
     if (activeMode === 'classic') {
       const classicStats = (window.calculateLiveClassicStats ? window.calculateLiveClassicStats(gameState) : null) || gameState?.classic || {};
       newArchive = {
@@ -675,10 +773,7 @@ async function archiveCurrentSeason() {
         guildList: classicStats.guildList || [],
         heroList: classicStats.heroList || []
       };
-    }
-
-    // 2. RPG CLASS & TALENT SNAPSHOT (直接克隆當前已運算好的 RPG 完整狀態)
-    else if (activeMode === 'rpg_talent' || activeMode === 'rpg') {
+    } else if (activeMode === 'rpg_talent' || activeMode === 'rpg') {
       const rpgStats = (window.calculateLiveRPGStats ? window.calculateLiveRPGStats(gameState) : null) || gameState?.rpg || {};
       newArchive = {
         id: `snapshot_rpg_${Date.now()}`,
@@ -693,10 +788,109 @@ async function archiveCurrentSeason() {
         guildSynergyList: rpgStats.guildSynergyList || [],
         heroRpgList: rpgStats.heroRpgList || []
       };
-    }
-
-    // 3. WORLD BOSS SNAPSHOT (100% 絕對零誤差：直接克隆當前 live gameState 中的全部實時輸出與排行榜)
-    else {
+    } else if (activeMode === 'faction_war') {
+      const guildList = gameState?.guilds || [];
+      let faction1 = { name: gameState?.faction?.f1Name || "🟢 均衡聯盟", hp: gameState?.faction?.baseHp || 500000, dmg: 0, repair: 0, guilds: [] };
+      let faction2 = { name: gameState?.faction?.f2Name || "🔴 狂怒部落", hp: gameState?.faction?.baseHp || 500000, dmg: 0, repair: 0, guilds: [] };
+      guildList.forEach((g, idx) => {
+        const targetF = (idx % 2 === 0) ? faction1 : faction2;
+        targetF.guilds.push(g.name);
+        const gHeroes = (gameState?.heroStats || []).filter(h => h.guild === g.name);
+        targetF.dmg += gHeroes.reduce((s, h) => s + (h.totalTrimp || 0), 0) * 10 + gHeroes.reduce((s, h) => s + (h.maxGap || 0), 0) * 100;
+        targetF.repair += gHeroes.reduce((s, h) => s + (h.zone2Count || 0), 0) * 5000 + gHeroes.reduce((s, h) => s + (h.totalCalories || 0), 0);
+      });
+      faction1.currentHp = Math.max(0, faction1.hp - faction2.dmg + faction1.repair);
+      faction2.currentHp = Math.max(0, faction2.hp - faction1.dmg + faction2.repair);
+      const heroList = JSON.parse(JSON.stringify(gameState?.heroStats || [])).map(h => ({
+        ...h,
+        siegeDmg: Math.round((h.totalTrimp || 0) * 10 + (h.maxGap || 0) * 100),
+        wallRepair: Math.round((h.zone2Count || 0) * 5000 + (h.totalCalories || 0))
+      }));
+      newArchive = {
+        id: `snapshot_faction_${Date.now()}`,
+        type: 'faction_war',
+        seasonTitle: snapshotTitle,
+        seasonPeriod: `${activeStartStr} ~ ${activeEndStr}`,
+        archivedAt: timeStampStr,
+        status: 'completed',
+        statusLabel: '🏁 雙城激戰已圓滿結算封存',
+        isVisible: true,
+        faction1,
+        faction2,
+        heroList
+      };
+    } else if (activeMode === 'survival') {
+      const survivingHeroes = JSON.parse(JSON.stringify(gameState?.heroStats || [])).map(h => {
+        const surv = window.computeHeroSurvival ? window.computeHeroSurvival(h, gameState) : {
+          currentHp: 10000, currentPenalty: 0, isDead: false, food: h.totalCalories || 0, scavenge: (h.totalTrimp || 0) * 1.5, survivedDays: 1, daysElapsed: 1, maxHp: 10000, decayPerDay: 500
+        };
+        return { ...h, ...surv };
+      }).sort((a, b) => b.currentHp - a.currentHp);
+      newArchive = {
+        id: `snapshot_survival_${Date.now()}`,
+        type: 'survival',
+        seasonTitle: snapshotTitle,
+        seasonPeriod: `${activeStartStr} ~ ${activeEndStr}`,
+        archivedAt: timeStampStr,
+        status: 'completed',
+        statusLabel: '🏁 飢餓法則生存戰已圓滿結算封存',
+        isVisible: true,
+        survivalConfig: gameState?.survival || {},
+        survivingHeroes
+      };
+    } else if (activeMode === 'base_builder') {
+      const heroList = JSON.parse(JSON.stringify(gameState?.heroStats || []));
+      let totalWood = 0, totalSteel = 0, totalMana = 0;
+      heroList.forEach(h => {
+        totalWood += (h.totalCalories || 0);
+        totalSteel += (h.totalTrimp || 0);
+        totalMana += (h.maxGap || 0) * 10 + (h.zone2Count || 0) * 50;
+      });
+      newArchive = {
+        id: `snapshot_base_${Date.now()}`,
+        type: 'base_builder',
+        seasonTitle: snapshotTitle,
+        seasonPeriod: `${activeStartStr} ~ ${activeEndStr}`,
+        archivedAt: timeStampStr,
+        status: 'completed',
+        statusLabel: '🏁 鋼鐵要塞工程已圓滿結算封存',
+        isVisible: true,
+        baseConfig: gameState?.base || {},
+        totalWood: Math.round(totalWood),
+        totalSteel: Math.round(totalSteel),
+        totalMana: Math.round(totalMana),
+        heroList
+      };
+    } else if (activeMode === 'bingo') {
+      const acts = (gameState?.activities || []).filter(a => a.isValidAttack);
+      const m = gameState?.bingo?.multiplier || 1.0;
+      const minWearableRequired = Math.max(1, Math.ceil(5 * m));
+      const maxManualAllowed = Math.max(1, Math.floor(5 / m));
+      const grid = [
+        { key: "長征先鋒", desc: `全服累計 ${Math.ceil(10 * m)} 次超過 1 小時的訓練`, ok: acts.filter(a => a.duration >= 60).length >= Math.ceil(10 * m) },
+        { key: "燃脂大師", desc: `解鎖 ${Math.ceil(20 * m)} 次完美的 Zone 2 綠色指標`, ok: acts.filter(a => a.isZone2).length >= Math.ceil(20 * m) },
+        { key: "心跳超載", desc: `全服累積引擎衝力 TRIMP 破 ${Math.ceil(3000 * m).toLocaleString()}`, ok: acts.reduce((s, a) => s + (a.trimp || 0), 0) >= 3000 * m },
+        { key: "爆發限界", desc: `出現 ${Math.ceil(5 * m)} 次落差大於 70 的魔鬼心率訓練`, ok: acts.filter(a => a.gapVal >= 70).length >= Math.ceil(5 * m) },
+        { key: "紀律部隊", desc: `伺服器至少有 ${Math.max(1, Math.ceil(3 * m))} 人達成 10 次出勤`, ok: (gameState?.heroStats || []).filter(h => (h.validWorkouts || 0) >= 10).length >= Math.max(1, Math.ceil(3 * m)) },
+        { key: "脂肪燃燒者", desc: `全服大熱量！總計燃燒 ${(50000 * m).toLocaleString()} 卡路里`, ok: acts.reduce((s, a) => s + (a.calories || 0), 0) >= 50000 * m },
+        { key: "死神擦肩", desc: `尋找 ${Math.max(1, Math.ceil(2 * m))} 名極限 MaxGap 突破 80 的勇者`, ok: (gameState?.heroStats || []).filter(h => (h.maxGap || 0) >= 80).length >= Math.max(1, Math.ceil(2 * m)) },
+        { key: "真金不怕火", desc: `全服累積至少 ${minWearableRequired} 次有效訓練，且手動打卡控制在 ${maxManualAllowed} 次內`, ok: acts.length >= minWearableRequired && acts.filter(a => a.isManual).length <= maxManualAllowed },
+        { key: "冒險起點", desc: "中央免費贈送的補給空間", ok: true }
+      ];
+      newArchive = {
+        id: `snapshot_bingo_${Date.now()}`,
+        type: 'bingo',
+        seasonTitle: snapshotTitle,
+        seasonPeriod: `${activeStartStr} ~ ${activeEndStr}`,
+        archivedAt: timeStampStr,
+        status: 'completed',
+        statusLabel: '🏁 戰神拼圖已圓滿結算封存',
+        isVisible: true,
+        multiplier: m,
+        grid,
+        heroList: JSON.parse(JSON.stringify(gameState?.heroStats || []))
+      };
+    } else {
       const currentHeroStats = JSON.parse(JSON.stringify(gameState?.heroStats || window.heroStatsList || []));
       currentHeroStats.sort((a, b) => (b.totalDamage || b.score || 0) - (a.totalDamage || a.score || 0));
       const currentGuilds = JSON.parse(JSON.stringify(gameState?.guilds || []));
@@ -963,29 +1157,80 @@ function previewDamageCalculation() {
   const heroName = document.getElementById('inp-hero')?.value || '';
   const hero = gameState?.heroes?.find(h => h.name === heroName);
   const maxHrEst = hero?.maxHr || 185;
+  const rpgClass = hero?.rpgClass || '狂戰士';
 
   const duration = parseFloat(document.getElementById('inp-duration')?.value) || 0;
   const avgHr = parseFloat(document.getElementById('inp-avg-hr')?.value) || 0;
   const maxHr = parseFloat(document.getElementById('inp-max-hr')?.value) || 0;
   const calories = parseFloat(document.getElementById('inp-calories')?.value) || 0;
 
-  const minDur = parseFloat(document.getElementById('cfg-min-dur')?.value || document.getElementById('cfg-classic-min-dur')?.value) || 30.0;
+  const minDur = parseFloat(document.getElementById('cfg-global-min-dur')?.value || document.getElementById('cfg-min-dur')?.value || document.getElementById('cfg-classic-min-dur')?.value) || 30.0;
   const magMult = parseFloat(document.getElementById('cfg-mag-mult')?.value) || 15.0;
 
   let val1 = 0, val2 = 0, val3 = 0, totalVal = 0;
 
   if (duration >= minDur) {
-    val1 = Math.round(calories);
-    if (maxHrEst > 0 && avgHr > 0) {
-      const ratio = avgHr / maxHrEst;
-      const trimp = duration * ratio * Math.exp(1.92 * ratio);
-      val2 = Math.round(trimp * magMult);
-    }
+    const ratio = (maxHrEst > 0 && avgHr > 0) ? (avgHr / maxHrEst) : 0;
+    const trimp = ratio > 0 ? (duration * ratio * Math.exp(1.92 * ratio)) : 0;
     const gap = Math.max(0, maxHr - avgHr);
-    val3 = Math.round(gap * 100);
-  }
+    const isZone2 = ratio >= 0.60 && ratio < 0.75;
 
-  totalVal = val1 + val2 + val3;
+    if (mode === 'classic') {
+      val1 = Math.round(calories);
+      val2 = Math.round(trimp * 10) / 10;
+      val3 = Math.round(gap);
+      totalVal = Math.round(calories + trimp * 10 + gap * 10);
+    } else if (mode === 'rpg_talent') {
+      val1 = Math.round(calories);
+      val2 = Math.round(trimp);
+      if (rpgClass === '狂戰士') {
+        val3 = Math.round(gap * 8);
+        totalVal = Math.round(gap * 8 + calories * 0.6);
+      } else if (rpgClass === '聖騎士') {
+        val3 = 200;
+        totalVal = Math.round(200 + duration * 3.5);
+      } else if (rpgClass === '遊俠') {
+        val3 = isZone2 ? 180 : 0;
+        totalVal = Math.round((isZone2 ? 180 : 0) + calories * 1.2);
+      } else if (rpgClass === '大法師') {
+        val3 = Math.round(trimp * 12);
+        totalVal = Math.round(trimp * 12 + calories * 0.5);
+      } else {
+        val3 = Math.round(trimp * 25);
+        totalVal = Math.round(calories * 5 + trimp * 25);
+      }
+    } else if (mode === 'faction_war') {
+      val1 = Math.round(trimp * 10 + gap * 100);
+      val2 = Math.round(calories + (isZone2 ? 5000 : 0));
+      val3 = isZone2 ? 1 : 0;
+      totalVal = val1 + val2;
+    } else if (mode === 'survival') {
+      val1 = Math.round(calories);
+      val2 = Math.round(trimp * 1.5);
+      val3 = Math.round(gap);
+      totalVal = val1 + val2;
+    } else if (mode === 'base_builder') {
+      val1 = Math.round(calories);
+      val2 = Math.round(trimp);
+      val3 = Math.round(gap * 10 + (isZone2 ? 50 : 0));
+      totalVal = val1 + val2 + val3;
+    } else if (mode === 'bingo') {
+      val1 = Math.round(calories);
+      val2 = Math.round(trimp);
+      val3 = Math.round(gap);
+      let checks = 0;
+      if (duration >= 60) checks++;
+      if (isZone2) checks++;
+      if (gap >= 70) checks++;
+      if (calories >= 300) checks++;
+      totalVal = checks;
+    } else {
+      val1 = Math.round(calories);
+      val2 = Math.round(trimp * magMult);
+      val3 = Math.round(gap * 100);
+      totalVal = val1 + val2 + val3;
+    }
+  }
 
   const p1 = document.getElementById('prev-phys');
   const p2 = document.getElementById('prev-mag');
@@ -1007,13 +1252,18 @@ async function handleManualAttack(e) {
   const maxHr = parseFloat(document.getElementById('inp-max-hr').value) || 0;
   const calories = parseFloat(document.getElementById('inp-calories').value) || 0;
   const title = document.getElementById('inp-title').value.trim() || '手動打卡鍛鍊';
+  const customDateRaw = document.getElementById('inp-date')?.value || '';
 
   if (!heroName) { alert('請選擇英雄'); return; }
   if (duration <= 0) { alert('運動時長必須大於 0 分鐘'); return; }
 
   const newActId = `manual_${Date.now()}`;
   const now = new Date();
-  const dateStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+  const timePart = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+  const datePart = customDateRaw
+    ? inputValToDate(customDateRaw)
+    : `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
+  const dateStr = `${datePart} ${timePart}`;
 
   const actObj = {
     id: newActId,
@@ -1301,6 +1551,8 @@ function openEditActivityModal(actId) {
 
   document.getElementById('act-edit-id').value = act.id;
   document.getElementById('act-edit-title').value = act.title || act.name || '';
+  const dateEl = document.getElementById('act-edit-date');
+  if (dateEl) dateEl.value = dateToInputVal(act.date || act.time || '');
   document.getElementById('act-edit-duration').value = act.duration || 0;
   document.getElementById('act-edit-calories').value = act.calories || 0;
   document.getElementById('act-edit-avghr').value = act.avgHr || 0;
@@ -1319,26 +1571,38 @@ async function saveActivityFromModal() {
   if (!act) return;
 
   const newTitle = document.getElementById('act-edit-title').value.trim();
+  const newDateInput = document.getElementById('act-edit-date')?.value || '';
   const newDuration = parseFloat(document.getElementById('act-edit-duration').value) || 0;
   const newCalories = parseFloat(document.getElementById('act-edit-calories').value) || 0;
   const newAvgHr = parseFloat(document.getElementById('act-edit-avghr').value) || 0;
   const newMaxHr = parseFloat(document.getElementById('act-edit-maxhr').value) || 0;
 
+  let newDateStr = act.date || act.time || '';
+  if (newDateInput) {
+    const formattedDay = inputValToDate(newDateInput);
+    const oldParts = String(newDateStr).trim().split(' ');
+    newDateStr = oldParts.length > 1 ? `${formattedDay} ${oldParts.slice(1).join(' ')}` : formattedDay;
+  }
+
   act.title = newTitle;
   act.name = newTitle;
+  act.date = newDateStr;
+  act.time = newDateStr;
   act.duration = newDuration;
   act.calories = newCalories;
   act.avgHr = newAvgHr;
   act.maxHr = newMaxHr;
 
   try {
-    await window.supabase.update("activities", `id=eq.${encodeURIComponent(actId)}`, {
+    const updatePayload = {
       name: newTitle,
       duration: newDuration,
       calories: newCalories,
       avg_hr: newAvgHr,
       max_hr: newMaxHr
-    });
+    };
+    if (newDateStr) updatePayload.date = newDateStr;
+    await window.supabase.update("activities", `id=eq.${encodeURIComponent(actId)}`, updatePayload);
     closeActivityModal();
     if (window.syncFromDatabase) await window.syncFromDatabase();
     alert('✅ 運動紀錄已成功更新並同步至 Supabase 雲端資料庫！');
@@ -1369,19 +1633,65 @@ function importFullBackupJSON(event) {
   reader.onload = async (e) => {
     try {
       const imported = JSON.parse(e.target.result);
-      if (!confirm('確定要以此備份檔案覆蓋全站資料嗎？此操作不可逆！')) return;
+      if (!confirm('確定要以此備份檔案還原至 Supabase 雲端資料庫嗎？此操作將更新賽季設定、快照、英雄與運動紀錄！')) return;
 
-      const res = await fetch('/api/settings/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(imported)
-      });
-      if (res.ok) {
-        alert('🎉 全站資料已成功還原！');
-        window.location.reload();
+      const configWrites = [];
+      if (imported.activeMode) configWrites.push(window.supabase.insert("game_config", { key: "active_mode", value: imported.activeMode }));
+      if (imported.boss) configWrites.push(window.supabase.insert("game_config", { key: "boss_config", value: imported.boss }));
+      if (imported.classic) configWrites.push(window.supabase.insert("game_config", { key: "classic_config", value: imported.classic }));
+      if (imported.rpg) configWrites.push(window.supabase.insert("game_config", { key: "rpg_config", value: imported.rpg }));
+      if (imported.faction) configWrites.push(window.supabase.insert("game_config", { key: "faction_config", value: imported.faction }));
+      if (imported.survival) configWrites.push(window.supabase.insert("game_config", { key: "survival_config", value: imported.survival }));
+      if (imported.base) configWrites.push(window.supabase.insert("game_config", { key: "base_config", value: imported.base }));
+      if (imported.bingo) configWrites.push(window.supabase.insert("game_config", { key: "bingo_config", value: imported.bingo }));
+      if (Array.isArray(imported.snapshots || imported.archivedSeasons)) {
+        configWrites.push(window.supabase.insert("game_config", { key: "snapshots", value: imported.snapshots || imported.archivedSeasons }));
       }
+      if (Array.isArray(imported.excludeKeywords)) {
+        configWrites.push(window.supabase.insert("game_config", { key: "exclude_keywords", value: imported.excludeKeywords }));
+      }
+      await Promise.all(configWrites);
+
+      if (Array.isArray(imported.heroes) && imported.heroes.length > 0) {
+        const heroRows = imported.heroes.map(h => ({
+          name: h.name,
+          age: h.age || 35,
+          max_hr: h.maxHr || h.max_hr || (220 - (h.age || 35)),
+          guild: h.guild || '自由英雄',
+          rpg_class: h.rpgClass || h.rpg_class || '狂戰士',
+          strava_id: h.stravaId || h.strava_id || '',
+          avatar: h.avatar || ''
+        }));
+        await window.supabase.insert("heroes", heroRows);
+      }
+
+      if (Array.isArray(imported.activities) && imported.activities.length > 0) {
+        const actRows = imported.activities.map(a => ({
+          id: String(a.id),
+          hero: a.hero || a.heroName,
+          date: a.date || a.time || '',
+          type: a.type || 'Workout',
+          name: a.title || a.name || '運動',
+          duration: Number(a.duration) || 0,
+          distance: Number(a.distance) || 0,
+          elevation: Number(a.elevation) || 0,
+          avg_hr: Number(a.avgHr ?? a.avg_hr) || 0,
+          max_hr: Number(a.maxHr ?? a.max_hr) || 0,
+          calories: Number(a.calories) || 0,
+          is_manual: Boolean(a.isManual ?? a.is_manual),
+          is_excluded: Boolean(a.isExcluded ?? a.is_excluded)
+        }));
+        for (let i = 0; i < actRows.length; i += 200) {
+          await window.supabase.insert("activities", actRows.slice(i, i + 200));
+        }
+      }
+
+      if (window.syncFromDatabase) await window.syncFromDatabase();
+      alert('🎉 全站備份資料已成功還原至 Supabase 雲端資料庫！');
+      window.location.reload();
     } catch (err) {
-      alert('❌ 匯入失敗：JSON 格式無效！');
+      console.error("Import Backup Error:", err);
+      alert('❌ 匯入失敗：' + (err.message || 'JSON 格式無效！'));
     }
   };
   reader.readAsText(file);

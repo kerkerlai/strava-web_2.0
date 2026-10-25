@@ -46,6 +46,119 @@ function parseActivityDate(dateStr) {
     return null;
   }
 }
+window.parseActivityDate = parseActivityDate;
+
+/**
+ * 統一計算賽季起迄時間、已進行天數與剩餘天數倒數 (支援所有 7 大資料片)
+ */
+function getSeasonTimeMeta(state) {
+  const s = state || window.gameState || {};
+  const seasonStartStr = s.seasonStart || s.boss?.seasonStart || "2026/08/12";
+  const seasonEndStr = s.seasonEnd || s.boss?.seasonEnd || "2026/08/31";
+  const minDur = Number(s.summary?.minDurationMinutes || s.boss?.rules?.minDurationMinutes || s.classic?.minDuration || 30);
+
+  const startD = parseActivityDate(seasonStartStr + " 00:00:00") || new Date(2026, 7, 12, 0, 0, 0);
+  const endD = parseActivityDate(seasonEndStr + " 23:59:59") || new Date(2026, 7, 31, 23, 59, 59);
+  const now = new Date();
+
+  const totalDays = Math.max(1, Math.round((endD.getTime() + 1000 - startD.getTime()) / 86400000));
+  const cappedNowMs = Math.min(now.getTime(), endD.getTime());
+  const isEnded = now > endD;
+
+  let daysElapsed = 1;
+  if (now < startD) {
+    daysElapsed = 0;
+  } else if (isEnded) {
+    daysElapsed = totalDays;
+  } else {
+    daysElapsed = Math.min(totalDays, Math.max(1, Math.floor((cappedNowMs - startD.getTime()) / 86400000) + 1));
+  }
+
+  let daysRemaining = 0;
+  let statusBadge = "";
+  let countdownText = "";
+  if (now < startD) {
+    const daysToStart = Math.max(1, Math.ceil((startD.getTime() - now.getTime()) / 86400000));
+    daysRemaining = totalDays;
+    statusBadge = `⏳ 距離開賽還有 ${daysToStart} 天`;
+    countdownText = `尚未開賽 (倒數 ${daysToStart} 天)`;
+  } else if (isEnded) {
+    daysRemaining = 0;
+    statusBadge = `🏁 本賽季已結束 (共 ${totalDays} 天)`;
+    countdownText = `已結束`;
+  } else {
+    daysRemaining = Math.max(0, Math.ceil((endD.getTime() - now.getTime()) / 86400000));
+    statusBadge = `🔥 進行第 ${daysElapsed} 天 • 剩餘 ${daysRemaining} 天`;
+    countdownText = `進行第 ${daysElapsed} 天 (剩餘 ${daysRemaining} 天)`;
+  }
+
+  return {
+    seasonStart: seasonStartStr,
+    seasonEnd: seasonEndStr,
+    seasonStartStr,
+    seasonEndStr,
+    startD,
+    endD,
+    minDur,
+    totalDays,
+    daysElapsed,
+    daysRemaining,
+    isEnded,
+    statusBadge,
+    countdownText
+  };
+}
+window.getSeasonTimeMeta = getSeasonTimeMeta;
+
+/**
+ * 統一計算資料片五（飢餓法則）毒圈扣血、當前生存值與「開賽至今的存活天數」
+ * - 支援分段計價 (decayBasePenalty + decayUpdatedDate)，GM 中途改扣血不會回溯抹殺過去天數
+ * - 賽季結束後不再無限扣血
+ * - 荒野堅持天數 = 開賽至今的存活天數 (若存活中為 daysElapsed，若已陣亡為支撐到歸零的天數)
+ */
+function computeHeroSurvival(heroStat, state) {
+  const s = state || window.gameState || {};
+  const meta = getSeasonTimeMeta(s);
+  const survCfg = s.survival || {};
+  const maxHp = Number(survCfg.maxHp) || 10000;
+  const decayPerDay = Number(survCfg.decayPerDay) !== undefined && !isNaN(Number(survCfg.decayPerDay)) ? Number(survCfg.decayPerDay) : 500;
+
+  let currentPenalty = meta.daysElapsed * decayPerDay;
+  if (survCfg.decayBasePenalty !== undefined && survCfg.decayUpdatedDate) {
+    const updD = parseActivityDate(survCfg.decayUpdatedDate + " 00:00:00");
+    const cappedNowMs = Math.min(Date.now(), meta.endD.getTime());
+    if (updD && updD >= meta.startD && cappedNowMs >= updD.getTime()) {
+      const daysSinceUpd = Math.max(0, Math.floor((cappedNowMs - updD.getTime()) / 86400000));
+      currentPenalty = Number(survCfg.decayBasePenalty) + (daysSinceUpd * decayPerDay);
+    }
+  }
+
+  const food = Number(heroStat?.totalCalories || 0);
+  const scavenge = Number(heroStat?.totalTrimp || 0) * 1.5;
+  const currentHp = Math.floor(maxHp - currentPenalty + food + scavenge);
+  const isDead = currentHp <= 0;
+
+  let survivedDays = meta.daysElapsed;
+  if (isDead) {
+    survivedDays = decayPerDay > 0
+      ? Math.min(meta.daysElapsed, Math.max(0, Math.floor(Math.max(0, maxHp + food + scavenge - 1) / decayPerDay)))
+      : 0;
+  }
+
+  return {
+    maxHp,
+    decayPerDay,
+    daysDiff: meta.daysElapsed,
+    daysElapsed: meta.daysElapsed,
+    currentPenalty: Math.round(currentPenalty),
+    food: Math.round(food),
+    scavenge: Math.round(scavenge),
+    currentHp,
+    isDead,
+    survivedDays
+  };
+}
+window.computeHeroSurvival = computeHeroSurvival;
 
 function cleanNumber(val, defaultVal = 0.0) {
   if (val === undefined || val === null) return defaultVal;
@@ -238,7 +351,7 @@ const DEFAULT_RPG_CLASSES = {
     color: '#ef4444',
     bg: 'bg-rose-950/40 border-rose-500/50 text-rose-300',
     passiveName: '血性狂暴 (Bloodrage)',
-    passiveDesc: '無氧落差 (Gap) 獲得 +30% 額外戰力加成，大重量力竭突破。'
+    passiveDesc: '單次最高落差 MaxGap×50 + 累計落差×8 + 熱量×0.6，極限力竭突破。'
   },
   '聖騎士': {
     name: '聖騎士',
@@ -247,7 +360,7 @@ const DEFAULT_RPG_CLASSES = {
     color: '#eab308',
     bg: 'bg-amber-950/40 border-amber-500/50 text-amber-300',
     passiveName: '鋼鐵壁壘 (Iron Bastion)',
-    passiveDesc: '出勤次數 × 150 點聖光防禦值，痛苦承受力轉化為堅毅戰力。'
+    passiveDesc: '有效出勤次數×150 + 痛苦指數 Suffer×1.5 + 時長×1.0，轉化為堅毅戰力。'
   },
   '遊俠': {
     name: '遊俠',
@@ -256,7 +369,7 @@ const DEFAULT_RPG_CLASSES = {
     color: '#10b981',
     bg: 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300',
     passiveName: '精準巡航 (Precision Cruise)',
-    passiveDesc: 'Zone 2 有氧燃脂次數獲得 +35% 加成，巡航耐力極致轉化。'
+    passiveDesc: 'Zone 2 燃脂次數×120 + 熱量×1.2 + 時長×1.5，巡航耐力極致轉化。'
   },
   '大法師': {
     name: '大法師',
@@ -265,7 +378,7 @@ const DEFAULT_RPG_CLASSES = {
     color: '#06b6d4',
     bg: 'bg-cyan-950/40 border-cyan-500/50 text-cyan-300',
     passiveName: '奧術過載 (Arcane Overload)',
-    passiveDesc: '訓練衝力 TRIMP 放大 1.5 倍奧術增幅，心肺負荷戰力最高。'
+    passiveDesc: '訓練衝力 TRIMP×25 + 時長×2.0 奧術增幅，心肺負荷戰力最高。'
   },
   '刺客': {
     name: '刺客',
@@ -274,10 +387,10 @@ const DEFAULT_RPG_CLASSES = {
     color: '#a855f7',
     bg: 'bg-purple-950/40 border-purple-500/50 text-purple-300',
     passiveName: '致命密擊 (Lethal Density)',
-    passiveDesc: '訓練密度 (Density) 獲得 2.0 倍暗影刺殺加成，短時極致爆發。'
+    passiveDesc: '訓練密度 Density×1200 + 最高落差 MaxGap×40 + 熱量×0.8，短時極致爆發。'
   }
 };
-if (!window.RPG_CLASSES) window.RPG_CLASSES = DEFAULT_RPG_CLASSES;
+window.RPG_CLASSES = DEFAULT_RPG_CLASSES;
 
 /**
  * 計算 RPG 職業天賦模式 (RPG Talent Mode) 戰力、首席大師與公會羈絆
@@ -396,26 +509,37 @@ function calculateLiveRPGStats(state) {
  * 從 Supabase 雲端資料庫同步所有遊戲數據
  */
 async function syncFromDatabase() {
-  const syncBtn = document.getElementById('sheet-sync-btn') || document.getElementById('sync-db-btn');
+  const syncBtn = document.getElementById('btn-sheet-sync') || document.getElementById('sheet-sync-btn') || document.getElementById('sync-db-btn');
   if (syncBtn) {
     syncBtn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin text-amber-400"></i><span>同步中...</span>';
     if (window.lucide) lucide.createIcons();
   }
 
   try {
-    // 1. Parallel fetch from Supabase tables
+    // 1. Parallel fetch from Supabase tables (with explicit error tracking)
+    let fetchError = null;
     const [heroesData, activitiesData, configData] = await Promise.all([
-      window.supabase.fetch('heroes', 'select=*').catch(() => []),
-      window.supabase.fetch('activities', 'select=*').catch(() => []),
-      window.supabase.fetch('game_config', 'select=*').catch(() => [])
+      window.supabase.fetch('heroes', 'select=*').catch(err => { fetchError = err; return null; }),
+      window.supabase.fetch('activities', 'select=*').catch(err => { fetchError = err; return null; }),
+      window.supabase.fetch('game_config', 'select=*').catch(err => { fetchError = err; return null; })
     ]);
 
+    if (fetchError || !heroesData || !activitiesData || !configData) {
+      window.dbSyncHealthy = false;
+      console.warn('[Supabase] 雲端連線異常或讀取失敗，保留現有快取狀態以避免覆寫設定:', fetchError);
+      if (window.renderAllGameViews && window.gameState) window.renderAllGameViews();
+      return;
+    }
+
     // Fallback to local game_state if Supabase is completely empty
-    if ((!heroesData || heroesData.length === 0) && (!activitiesData || activitiesData.length === 0)) {
+    if (heroesData.length === 0 && activitiesData.length === 0) {
+      window.dbSyncHealthy = false;
       console.warn('[Supabase] 資料庫為空，嘗試載入本地快取...');
       if (window.renderAllGameViews) window.renderAllGameViews();
       return;
     }
+
+    window.dbSyncHealthy = true;
 
     // 2. Parse Config
     const configMap = {};
@@ -432,23 +556,41 @@ async function syncFromDatabase() {
     const snapshots = configMap.snapshots || gameState?.snapshots || [];
     const excludeKeywords = configMap.exclude_keywords || gameState?.excludeKeywords || ["羽球", "Badminton"];
 
-    // Parse Active Season Dates
-    let seasonStartStr = "2026/08/12";
-    let seasonEndStr = "2026/08/31";
+    // Parse Active Season Dates across all 7 expansion modes
+    const modeConfigMap = {
+      classic: classicConfig,
+      rpg: rpgConfig,
+      rpg_talent: rpgConfig,
+      world_boss: bossConfig,
+      faction_war: factionConfig,
+      survival: survivalConfig,
+      base_builder: baseConfig,
+      bingo: bingoConfig
+    };
+    const activeModeCfg = modeConfigMap[activeMode] || {};
 
-    if (activeMode === 'classic' && classicConfig.seasonStart) {
-      seasonStartStr = classicConfig.seasonStart;
-      seasonEndStr = classicConfig.seasonEnd || "2026/08/31";
-    } else if ((activeMode === 'rpg_talent' || activeMode === 'rpg') && rpgConfig.seasonStart) {
-      seasonStartStr = rpgConfig.seasonStart;
-      seasonEndStr = rpgConfig.seasonEnd || "2026/08/31";
-    } else if (bossConfig.seasonStart || classicConfig.seasonStart || rpgConfig.seasonStart) {
-      seasonStartStr = bossConfig.seasonStart || classicConfig.seasonStart || rpgConfig.seasonStart;
-      seasonEndStr = bossConfig.seasonEnd || classicConfig.seasonEnd || rpgConfig.seasonEnd || "2026/08/31";
-    }
+    const seasonStartStr = activeModeCfg.seasonStart
+      || bossConfig.seasonStart
+      || classicConfig.seasonStart
+      || rpgConfig.seasonStart
+      || survivalConfig.seasonStart
+      || factionConfig.seasonStart
+      || baseConfig.seasonStart
+      || bingoConfig.seasonStart
+      || "2026/08/12";
 
-    const seasonStartDate = parseActivityDate(seasonStartStr + " 00:00:00") || new Date(2026, 7, 12);
-    const seasonEndDate = parseActivityDate(seasonEndStr + " 23:59:59") || new Date(2026, 7, 31, 23, 59, 59);
+    const seasonEndStr = activeModeCfg.seasonEnd
+      || bossConfig.seasonEnd
+      || classicConfig.seasonEnd
+      || rpgConfig.seasonEnd
+      || survivalConfig.seasonEnd
+      || factionConfig.seasonEnd
+      || baseConfig.seasonEnd
+      || bingoConfig.seasonEnd
+      || "2026/08/31";
+
+    const seasonStartDate = parseActivityDate(seasonStartStr, false) || new Date(2026, 7, 12);
+    const seasonEndDate = parseActivityDate(seasonEndStr, true) || new Date(2026, 7, 31, 23, 59, 59);
 
     // 3. Parse Heroes & Guilds
     const heroes = [];
@@ -486,6 +628,7 @@ async function syncFromDatabase() {
         critDmg: 0,
         totalDmg: 0,
         maxGap: 0,
+        maxGapActId: null,
         validCount: 0
       };
     });
@@ -496,11 +639,14 @@ async function syncFromDatabase() {
     const physMult = bossConfig?.rules?.physMultiplier || 1.0;
     const magMult = bossConfig?.rules?.magicMultiplier || 15.0;
     const critMult = bossConfig?.rules?.critMultiplier || 100.0;
-    const minDurGlobal = (activeMode === 'classic' ? classicConfig?.minDuration : null)
+    const minDurGlobal = Number(
+      activeModeCfg?.minDuration
+      || activeModeCfg?.rules?.minDurationMinutes
       || bossConfig?.rules?.minDurationMinutes
       || classicConfig?.minDuration
       || gameState?.summary?.minDurationMinutes
-      || 30.0;
+      || 30.0
+    );
 
     (activitiesData || []).forEach(a => {
       const actId = String(a.id);
@@ -540,7 +686,10 @@ async function syncFromDatabase() {
         if (heroAggregates[a.hero]) {
           heroAggregates[a.hero].physDmg += physDmg;
           heroAggregates[a.hero].magDmg += magDmg;
-          heroAggregates[a.hero].maxGap = Math.max(heroAggregates[a.hero].maxGap, gap);
+          if (gap > heroAggregates[a.hero].maxGap || heroAggregates[a.hero].maxGapActId === null) {
+            heroAggregates[a.hero].maxGap = Math.max(heroAggregates[a.hero].maxGap, gap);
+            heroAggregates[a.hero].maxGapActId = actId;
+          }
           heroAggregates[a.hero].validCount += 1;
         }
       }
@@ -549,7 +698,7 @@ async function syncFromDatabase() {
       const density = duration > 0 ? (suffer / duration) : 0;
       let actCombatPower = 0;
       if (isValid) {
-        if (hero.rpgClass === '狂戰士') actCombatPower = Math.round((gap * 50) + (gap * 8) + (calories * 0.6));
+        if (hero.rpgClass === '狂戰士') actCombatPower = Math.round((gap * 8) + (calories * 0.6));
         else if (hero.rpgClass === '聖騎士') actCombatPower = Math.round(150 + (suffer * 1.5) + (duration * 1.0));
         else if (hero.rpgClass === '遊俠') actCombatPower = Math.round((isZone2 ? 120 : 0) + (calories * 1.2) + (duration * 1.5));
         else if (hero.rpgClass === '大法師') actCombatPower = Math.round((trimp * 25) + (duration * 2.0));
@@ -590,6 +739,18 @@ async function syncFromDatabase() {
         magDmg: magDmg,
         critDmg: singleCritDmg
       });
+    });
+
+    // 為狂戰士本賽季最高心率落差 (MaxGap) 的那筆運動加上 50×MaxGap 爆發加成，使單筆總和與賽季總戰力一致
+    activities.forEach(a => {
+      if (a.isValidAttack) {
+        const hero = heroMap[a.hero];
+        const agg = heroAggregates[a.hero];
+        if (hero && hero.rpgClass === '狂戰士' && agg && agg.maxGapActId === a.id) {
+          a.combatPower = Math.round((a.gapVal * 50) + (a.gapVal * 8) + (a.calories * 0.6));
+          a.isMaxGapRecord = true;
+        }
+      }
     });
 
     // Sort all activities chronologically (newest first)
@@ -665,7 +826,7 @@ async function syncFromDatabase() {
     (rpgStats.heroRpgList || []).forEach(r => { rpgMapByName[r.name] = r.combatPower || 0; });
     heroStatsList.forEach(h => { h.combatPower = rpgMapByName[h.name] || 0; });
 
-    const liveClassic = { ...classicConfig, ...classicStats, seasonStart: seasonStartStr, seasonEnd: seasonEndStr };
+    const liveClassic = { ...classicConfig, ...classicStats, seasonStart: seasonStartStr, seasonEnd: seasonEndStr, minDuration: minDurGlobal };
     const liveRpg = { ...rpgConfig, ...rpgStats, seasonStart: seasonStartStr, seasonEnd: seasonEndStr };
     const liveBoss = {
       ...bossConfig,
@@ -677,7 +838,7 @@ async function syncFromDatabase() {
       seasonEnd: seasonEndStr,
       avatar: bossConfig.avatar || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80',
       description: bossConfig.description || '索爾受到雷霆魔劍侵蝕陷入瘋狂！全服英雄透過每日嚴格汗水鍛鍊（單次達 30 分鐘），轉化為物理與魔法攻擊！',
-      rules: bossConfig.rules || { minDurationMinutes: 30.0, physMultiplier: 1.0, magicMultiplier: 15.0, critMultiplier: 100.0 }
+      rules: bossConfig.rules || { minDurationMinutes: minDurGlobal, physMultiplier: 1.0, magicMultiplier: 15.0, critMultiplier: 100.0 }
     };
 
     gameState = {
@@ -687,10 +848,10 @@ async function syncFromDatabase() {
       boss: liveBoss,
       classic: liveClassic,
       rpg: liveRpg,
-      faction: factionConfig,
-      survival: survivalConfig,
-      base: baseConfig,
-      bingo: bingoConfig,
+      faction: { ...factionConfig, seasonStart: factionConfig.seasonStart || seasonStartStr, seasonEnd: factionConfig.seasonEnd || seasonEndStr },
+      survival: { ...survivalConfig, seasonStart: survivalConfig.seasonStart || seasonStartStr, seasonEnd: survivalConfig.seasonEnd || seasonEndStr },
+      base: { ...baseConfig, seasonStart: baseConfig.seasonStart || seasonStartStr, seasonEnd: baseConfig.seasonEnd || seasonEndStr },
+      bingo: { ...bingoConfig, seasonStart: bingoConfig.seasonStart || seasonStartStr, seasonEnd: bingoConfig.seasonEnd || seasonEndStr },
       excludeKeywords: excludeKeywords,
       guilds: guilds,
       heroes: heroes,
@@ -719,6 +880,7 @@ async function syncFromDatabase() {
     }
 
   } catch (err) {
+    window.dbSyncHealthy = false;
     console.error('Supabase Database Sync Error:', err);
   } finally {
     if (syncBtn) {

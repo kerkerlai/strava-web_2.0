@@ -30,7 +30,7 @@ let viewerSortCol = 'date';
 let viewerSortAsc = false;
 let soundEnabled = true;
 
-// RPG Class Metadata
+// RPG Class Metadata (與實際公式 100% 對齊)
 const RPG_CLASSES = {
   '狂戰士': {
     name: '狂戰士',
@@ -39,7 +39,7 @@ const RPG_CLASSES = {
     color: '#ef4444',
     bg: 'bg-rose-950/40 border-rose-500/50 text-rose-300',
     passiveName: '血性狂暴 (Bloodrage)',
-    passiveDesc: '無氧落差 (Gap) 獲得 +30% 額外戰力加成，大重量力竭突破。'
+    passiveDesc: '戰力 = (單次最高落差 MaxGap × 50) + (累計落差 × 8) + (熱量 × 0.6)'
   },
   '聖騎士': {
     name: '聖騎士',
@@ -48,7 +48,7 @@ const RPG_CLASSES = {
     color: '#eab308',
     bg: 'bg-amber-950/40 border-amber-500/50 text-amber-300',
     passiveName: '鋼鐵壁壘 (Iron Bastion)',
-    passiveDesc: '出勤次數 × 150 點聖光防禦值，痛苦承受力轉化為堅毅戰力。'
+    passiveDesc: '戰力 = (有效出勤次數 × 150) + (痛苦指數 Suffer × 1.5) + (時長 × 1.0)'
   },
   '遊俠': {
     name: '遊俠',
@@ -57,7 +57,7 @@ const RPG_CLASSES = {
     color: '#10b981',
     bg: 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300',
     passiveName: '精準巡航 (Precision Cruise)',
-    passiveDesc: 'Zone 2 有氧燃脂次數獲得 +35% 加成，巡航耐力極致轉化。'
+    passiveDesc: '戰力 = (Zone 2 燃脂次數 × 120) + (熱量 × 1.2) + (時長 × 1.5)'
   },
   '大法師': {
     name: '大法師',
@@ -66,7 +66,7 @@ const RPG_CLASSES = {
     color: '#06b6d4',
     bg: 'bg-cyan-950/40 border-cyan-500/50 text-cyan-300',
     passiveName: '奧術過載 (Arcane Overload)',
-    passiveDesc: '訓練衝力 TRIMP 放大 1.5 倍奧術增幅，心肺負荷戰力最高。'
+    passiveDesc: '戰力 = (訓練衝力 TRIMP × 25) + (運動時長 × 2.0)'
   },
   '刺客': {
     name: '刺客',
@@ -75,10 +75,39 @@ const RPG_CLASSES = {
     color: '#a855f7',
     bg: 'bg-purple-950/40 border-purple-500/50 text-purple-300',
     passiveName: '致命密擊 (Lethal Density)',
-    passiveDesc: '訓練密度 (Density) 獲得 2.0 倍暗影刺殺加成，短時極致爆發。'
+    passiveDesc: '戰力 = (訓練密度 Density × 1200) + (單次最高落差 × 40) + (熱量 × 0.8)'
   }
 };
 window.RPG_CLASSES = RPG_CLASSES;
+
+function getSeasonBannerHtml(borderColor = 'border-amber-500/30', badgeBg = 'bg-amber-500/20 text-amber-300 border-amber-500/40') {
+  const meta = typeof window.getSeasonTimeMeta === 'function'
+    ? window.getSeasonTimeMeta(gameState)
+    : {
+        seasonStartStr: gameState?.seasonStart || '2026/08/12',
+        seasonEndStr: gameState?.seasonEnd || '2026/08/31',
+        totalDays: 20,
+        daysElapsed: 1,
+        daysRemaining: 19,
+        badgeText: '🔥 進行中'
+      };
+  const minDur = gameState?.summary?.minDurationMinutes || gameState?.boss?.rules?.minDurationMinutes || 30;
+  return `
+    <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="px-2.5 py-0.5 rounded-full font-mono font-bold border ${badgeBg}">
+          📅 賽季區間：${meta.seasonStartStr} ~ ${meta.seasonEndStr} (共 ${meta.totalDays} 天)
+        </span>
+        <span class="px-2.5 py-0.5 rounded-full font-bold bg-slate-950 text-cyan-300 border border-cyan-500/30">
+          ${meta.badgeText}
+        </span>
+      </div>
+      <span class="text-[11px] text-amber-400 font-bold">
+        ⏱️ 有效門檻：單次運動須滿 ${minDur} 分鐘 (未滿 ${minDur} 分鐘不計分)
+      </span>
+    </div>
+  `;
+}
 
 // Web Audio API Sound Generator
 const AudioFX = {
@@ -475,181 +504,33 @@ function renderActiveExpansionBadge() {
 // -------------------------------------------------------------
 
 function calculateLiveClassicMetrics() {
-  const heroes = gameState?.heroes || [];
-  const guilds = gameState?.guilds || [];
-  const activities = gameState?.activities || [];
-
-  const validActs = activities.filter(a => a.isValidAttack);
-
-  const heroDataMap = {};
-  heroes.forEach(h => {
-    heroDataMap[h.name] = {
-      name: h.name,
-      guild: h.guild,
-      avatar: h.avatar,
-      maxHr: h.maxHr || 185,
-      workouts: 0,
-      duration: 0,
-      calories: 0,
-      trimp: 0,
-      zone2: 0,
-      gapSum: 0,
-      maxGap: 0,
-      suffer: 0,
-      density: 0
-    };
-  });
-
-  validActs.forEach(a => {
-    const h = heroDataMap[a.hero];
-    if (h) {
-      h.workouts += 1;
-      h.duration += (a.duration || 0);
-      h.calories += (a.calories || 0);
-      h.trimp += (a.trimp || 0);
-      if (a.isZone2) h.zone2 += 1;
-      h.gapSum += (a.gap || 0);
-      h.maxGap = Math.max(h.maxGap, a.gap || 0);
-      h.suffer += (a.suffer || 0);
-    }
-  });
-
-  Object.values(heroDataMap).forEach(h => {
-    h.density = h.duration > 0 ? (h.suffer / h.duration) : 0;
-  });
-
-  const guildDataMap = {};
-  guilds.forEach(g => {
-    const members = g.members || [];
-    const memberCount = Math.max(1, members.length);
-    guildDataMap[g.name] = {
-      name: g.name,
-      badge: g.badge || '🛡️',
-      color: g.color || '#3b82f6',
-      memberCount: memberCount,
-      members: members,
-      totalWorkouts: 0,
-      totalDuration: 0,
-      totalCalories: 0,
-      totalTrimp: 0,
-      totalZone2: 0,
-      totalGap: 0,
-      totalSuffer: 0,
-      perWorkouts: 0,
-      perDuration: 0,
-      perCalories: 0,
-      perTrimp: 0,
-      perZone2: 0,
-      perGap: 0,
-      perSuffer: 0,
-      perDensity: 0
-    };
-  });
-
-  Object.values(heroDataMap).forEach(h => {
-    const g = guildDataMap[h.guild];
-    if (g) {
-      g.totalWorkouts += h.workouts;
-      g.totalDuration += h.duration;
-      g.totalCalories += h.calories;
-      g.totalTrimp += h.trimp;
-      g.totalZone2 += h.zone2;
-      g.totalGap += h.gapSum;
-      g.totalSuffer += h.suffer;
-    }
-  });
-
-  Object.values(guildDataMap).forEach(g => {
-    g.perWorkouts = Math.round((g.totalWorkouts / g.memberCount) * 10) / 10;
-    g.perDuration = Math.round((g.totalDuration / g.memberCount) * 10) / 10;
-    g.perCalories = Math.round(g.totalCalories / g.memberCount);
-    g.perTrimp = Math.round((g.totalTrimp / g.memberCount) * 10) / 10;
-    g.perZone2 = Math.round((g.totalZone2 / g.memberCount) * 10) / 10;
-    g.perGap = Math.round((g.totalGap / g.memberCount) * 10) / 10;
-    g.perSuffer = Math.round((g.totalSuffer / g.memberCount) * 10) / 10;
-    g.perDensity = g.totalDuration > 0 ? Math.round((g.totalSuffer / g.totalDuration) * 100) / 100 : 0;
-  });
-
-  const gList = Object.values(guildDataMap);
-  const hList = Object.values(heroDataMap);
-
-  const maxGTrimp = Math.max(1, ...gList.map(g => g.perTrimp));
-  const maxGCal = Math.max(1, ...gList.map(g => g.perCalories));
-  const maxGZone2 = Math.max(1, ...gList.map(g => g.perZone2));
-  const maxGGap = Math.max(1, ...gList.map(g => g.perGap));
-  const maxGDens = Math.max(0.1, ...gList.map(g => g.perDensity));
-  const maxGWk = Math.max(1, ...gList.map(g => g.perWorkouts));
-
-  const maxHTrimp = Math.max(1, ...hList.map(h => h.trimp));
-  const maxHCal = Math.max(1, ...hList.map(h => h.calories));
-  const maxHZone2 = Math.max(1, ...hList.map(h => h.zone2));
-  const maxHGap = Math.max(1, ...hList.map(h => h.gapSum));
-  const maxHDens = Math.max(0.1, ...hList.map(h => h.density));
-  const maxHWk = Math.max(1, ...hList.map(h => h.workouts));
-
-  const teamAerobic = gList.map(g => ({
-    name: g.name,
-    score: Math.round(((g.perTrimp / maxGTrimp) * 40 + (g.perCalories / maxGCal) * 30 + (g.perZone2 / maxGZone2) * 30) * 100) / 100
-  })).sort((a, b) => b.score - a.score).map((t, idx) => ({
-    ...t, rank: idx + 1, badge: idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : ''))
-  }));
-
-  const heroAerobic = hList.map(h => ({
-    name: h.name, guild: h.guild,
-    score: Math.round(((h.trimp / maxHTrimp) * 40 + (h.calories / maxHCal) * 30 + (h.zone2 / maxHZone2) * 30) * 100) / 100
-  })).sort((a, b) => b.score - a.score).map((h, idx) => ({
-    ...h, rank: idx + 1, badge: idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : ''))
-  }));
-
-  const teamAnaerobic = gList.map(g => ({
-    name: g.name,
-    score: Math.round(((g.perGap / maxGGap) * 50 + (g.perDensity / maxGDens) * 30 + (g.perWorkouts / maxGWk) * 20) * 100) / 100
-  })).sort((a, b) => b.score - a.score).map((t, idx) => ({
-    ...t, rank: idx + 1, badge: idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : ''))
-  }));
-
-  const heroAnaerobic = hList.map(h => ({
-    name: h.name, guild: h.guild,
-    score: Math.round(((h.gapSum / maxHGap) * 40 + (h.density / maxHDens) * 30 + (h.maxHr / 220) * 15 + (h.workouts / maxHWk) * 15) * 100) / 100
-  })).sort((a, b) => b.score - a.score).map((h, idx) => ({
-    ...h, rank: idx + 1, badge: idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : ''))
-  }));
-
-  const buildLeaderboard = (getter, unit) => {
-    return [...gList].sort((a, b) => getter(b) - getter(a)).map((g, idx) => ({
-      rank: idx === 0 ? '🥇 1' : (idx === 1 ? '🥈 2' : (idx === 2 ? '🥉 3' : `#${idx+1}`)),
-      team: g.name,
-      value: getter(g).toLocaleString()
-    }));
-  };
-
-  const teamMetrics = [
-    { metric: "🏋️ 鋼鐵紀律 (人均出勤)", unit: "次", leaderboard: buildLeaderboard(g => g.perWorkouts) },
-    { metric: "⏱️ 精神時光屋 (人均時長)", unit: "分鐘", leaderboard: buildLeaderboard(g => g.perDuration) },
-    { metric: "🔋 燃脂發電機 (人均熱量)", unit: "kcal", leaderboard: buildLeaderboard(g => g.perCalories) },
-    { metric: "🚀 引擎過載 (人均衝力 TRIMP)", unit: "TRIMP", leaderboard: buildLeaderboard(g => g.perTrimp) },
-    { metric: "🟢 有氧大師 (人均有氧次數)", unit: "次", leaderboard: buildLeaderboard(g => g.perZone2) },
-    { metric: "🦍 絕對力量 (人均落差 Gap)", unit: "bpm", leaderboard: buildLeaderboard(g => g.perGap) },
-    { metric: "💥 效率之王 (人均密度)", unit: "分", leaderboard: buildLeaderboard(g => g.perDensity) },
-    { metric: "🥵 燃燒殆盡 (人均痛苦 Suffer)", unit: "分", leaderboard: buildLeaderboard(g => g.perSuffer) }
-  ];
-
-  return { champions: { teamAerobic, heroAerobic, teamAnaerobic, heroAnaerobic }, teamMetrics, guildList: gList, heroList: hList };
+  if (typeof window.calculateLiveClassicStats === 'function' && gameState) {
+    return window.calculateLiveClassicStats({
+      heroes: gameState.heroes || [],
+      guilds: gameState.guilds || [],
+      activities: (gameState.activities || []).filter(a => a.isValidAttack)
+    });
+  }
+  return { champions: { teamAerobic: [], heroAerobic: [], teamAnaerobic: [], heroAnaerobic: [] }, teamMetrics: [], guildList: [], heroList: [] };
 }
 
 function renderClassicModeView() {
+  const minDur = gameState?.summary?.minDurationMinutes || gameState?.boss?.rules?.minDurationMinutes || 30;
   const minDurEl = document.getElementById('classic-min-dur-text');
-  if (minDurEl) minDurEl.textContent = gameState?.summary?.minDurationMinutes || gameState?.boss?.rules?.minDurationMinutes || 30;
+  if (minDurEl) minDurEl.textContent = minDur;
   const champContainer = document.getElementById('classic-champions-container');
   const metricContainer = document.getElementById('classic-metrics-container');
   const guildTableContainer = document.getElementById('classic-guild-table-container');
 
   if (!champContainer || !metricContainer) return;
 
-  const seasonStartStr = gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
-  const seasonEndStr = gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
+  const meta = typeof window.getSeasonTimeMeta === 'function'
+    ? window.getSeasonTimeMeta(gameState)
+    : { seasonStartStr: gameState?.seasonStart || '2026/08/12', seasonEndStr: gameState?.seasonEnd || '2026/08/31', totalDays: 20, badgeText: '🔥 進行中' };
   const classicPeriodEl = document.getElementById("classic-period-text");
-  if (classicPeriodEl) classicPeriodEl.innerText = `競賽區間：${seasonStartStr} ~ ${seasonEndStr}`;
+  if (classicPeriodEl) {
+    classicPeriodEl.innerText = `競賽區間：${meta.seasonStartStr} ~ ${meta.seasonEndStr} (共 ${meta.totalDays} 天 • ${meta.badgeText})`;
+  }
 
   const classicData = calculateLiveClassicMetrics();
   const champs = classicData.champions;
@@ -781,12 +662,18 @@ function renderClassicModeView() {
 // -------------------------------------------------------------
 
 function calculateLiveRPGStats() {
+  if (typeof window.calculateLiveRPGStats === 'function' && window.calculateLiveRPGStats !== calculateLiveRPGStats && gameState) {
+    return window.calculateLiveRPGStats({
+      heroes: gameState.heroes || [],
+      guilds: gameState.guilds || [],
+      activities: (gameState.activities || []).filter(a => a.isValidAttack)
+    });
+  }
   const heroes = gameState?.heroes || [];
   const guilds = gameState?.guilds || [];
   const activities = gameState?.activities || [];
   const validActs = activities.filter(a => a.isValidAttack);
 
-  // Group stats by hero
   const heroRpgMap = {};
   heroes.forEach(h => {
     const heroClassKey = h.rpgClass || '狂戰士';
@@ -823,7 +710,6 @@ function calculateLiveRPGStats() {
     }
   });
 
-  // Calculate Combat Rating per Class
   Object.values(heroRpgMap).forEach(h => {
     const density = h.duration > 0 ? (h.suffer / h.duration) : 0;
     if (h.rpgClass === '狂戰士') {
@@ -841,20 +727,16 @@ function calculateLiveRPGStats() {
     }
   });
 
-  // Class Masters (Top 1 for each class)
   const classMasters = {};
   Object.keys(RPG_CLASSES).forEach(cName => {
     const candidates = Object.values(heroRpgMap).filter(h => h.rpgClass === cName).sort((a, b) => b.combatPower - a.combatPower);
     classMasters[cName] = candidates[0] || null;
   });
 
-  // Guild Synergy
   const guildSynergyList = guilds.map(g => {
     const members = g.members || [];
     const memberHeroes = members.map(m => heroRpgMap[m]).filter(Boolean);
     const rawPower = memberHeroes.reduce((s, h) => s + (h.combatPower || 0), 0);
-    
-    // Unique classes in this guild
     const uniqueClasses = new Set(memberHeroes.map(h => h.rpgClass));
     let bonusPct = 0;
     let synergyTag = '基礎小隊';
@@ -899,10 +781,14 @@ function renderRPGClassTalentView() {
 
   if (!mastersContainer || !synergyContainer) return;
 
-  const seasonStartStr = gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
-  const seasonEndStr = gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
+  const minDur = gameState?.summary?.minDurationMinutes || gameState?.boss?.rules?.minDurationMinutes || 30;
+  const meta = typeof window.getSeasonTimeMeta === 'function'
+    ? window.getSeasonTimeMeta(gameState)
+    : { seasonStartStr: gameState?.seasonStart || '2026/08/12', seasonEndStr: gameState?.seasonEnd || '2026/08/31', totalDays: 20, badgeText: '🔥 進行中' };
   const rpgPeriodEl = document.getElementById("rpg-period-text");
-  if (rpgPeriodEl) rpgPeriodEl.innerText = `修煉區間：${seasonStartStr} ~ ${seasonEndStr}`;
+  if (rpgPeriodEl) {
+    rpgPeriodEl.innerText = `修煉區間：${meta.seasonStartStr} ~ ${meta.seasonEndStr} (共 ${meta.totalDays} 天 • ${meta.badgeText} • 單次滿 ${minDur} 分鐘)`;
+  }
 
   const data = calculateLiveRPGStats();
   const masters = data.classMasters;
@@ -1004,7 +890,7 @@ function renderRPGClassTalentView() {
                 <span class="font-bold text-slate-200">${h.classMeta.passiveName}</span>：${h.classMeta.passiveDesc}
               </td>
               <td class="p-3 font-mono">${h.workouts}次 • ${h.zone2}次燃脂</td>
-              <td class="p-3 font-mono text-cyan-300">${h.trimp} • 落差 ${h.maxGap}</td>
+              <td class="p-3 font-mono text-cyan-300">${Math.round((h.trimp || 0) * 10) / 10} • 落差 ${h.maxGap}</td>
               <td class="p-3 text-right font-mono font-bold text-amber-400 text-sm">${h.combatPower.toLocaleString()}</td>
             </tr>
           `).join('')}
@@ -1051,11 +937,20 @@ function renderWorldBossView() {
   const avatarEl = document.getElementById('boss-avatar-img');
   if (avatarEl && boss.avatar) avatarEl.src = boss.avatar;
 
-  const seasonStart = gameState?.seasonStart || boss.seasonStart || "2026/08/12";
-  const seasonEnd = gameState?.seasonEnd || boss.seasonEnd || "2026/08/31";
+  const meta = typeof window.getSeasonTimeMeta === 'function'
+    ? window.getSeasonTimeMeta(gameState)
+    : {
+        seasonStartStr: gameState?.seasonStart || boss.seasonStart || "2026/08/12",
+        seasonEndStr: gameState?.seasonEnd || boss.seasonEnd || "2026/08/31",
+        totalDays: 20,
+        badgeText: '🔥 進行中'
+      };
 
   const seasonPeriodEl = document.getElementById("boss-season-period");
-  if (seasonPeriodEl) seasonPeriodEl.innerText = `討伐戰區間：${seasonStart} ~ ${seasonEnd}`;
+  if (seasonPeriodEl) seasonPeriodEl.innerText = `討伐戰區間：${meta.seasonStartStr} ~ ${meta.seasonEndStr} (共 ${meta.totalDays} 天)`;
+
+  const countdownEl = document.getElementById("countdown-text");
+  if (countdownEl) countdownEl.innerText = meta.badgeText;
 
   const statTot = document.getElementById('stat-total-damage');
   const statPhy = document.getElementById('stat-phys-dmg');
@@ -1204,11 +1099,11 @@ function loadHeroViewerData() {
   const heroActs = (gameState?.activities || []).filter(a => a.hero === selectedViewerHero);
   const heroStat = heroStatsList?.find(h => h.name === selectedViewerHero) || {};
 
-  const seasonStartStr = gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
-  const seasonEndStr = gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
-  const startD = parseActivityDate(seasonStartStr);
-  const endD = parseActivityDate(seasonEndStr);
-  if (endD) endD.setHours(23, 59, 59, 999);
+  const meta = typeof window.getSeasonTimeMeta === 'function'
+    ? window.getSeasonTimeMeta(gameState)
+    : { seasonStartStr: gameState?.seasonStart || '2026/08/12', seasonEndStr: gameState?.seasonEnd || '2026/08/31', badgeText: '🔥 進行中' };
+  const startD = parseActivityDate(meta.seasonStartStr, false);
+  const endD = parseActivityDate(meta.seasonEndStr, true);
 
   const inSeasonActs = heroActs.filter(a => {
     if (a.isExcluded || a.isValidAttack === false) return false;
@@ -1241,7 +1136,7 @@ function loadHeroViewerData() {
               <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-950 text-purple-300 border border-purple-700">年齡 ${hero.age} 歲</span>
             </div>
             <p class="text-xs text-slate-400 mt-0.5">
-              預估最大心率 (220-年齡)：<span class="font-mono font-bold text-cyan-400">${hero.maxHr} bpm</span> • 累計有效鍛鍊 <span class="font-mono font-bold text-amber-400">${heroStat.validWorkouts || 0}</span> 次
+              預估最大心率 (220-年齡)：<span class="font-mono font-bold text-cyan-400">${hero.maxHr} bpm</span> • 本季累計有效鍛鍊 <span class="font-mono font-bold text-amber-400">${heroStat.validWorkouts || 0}</span> 次 (${meta.seasonStartStr} ~ ${meta.seasonEndStr})
             </p>
           </div>
         </div>
@@ -1341,29 +1236,26 @@ function loadHeroViewerData() {
         </div>
       `;
     } else if (activeMode === "survival") {
-      const decayPerDay = gameState?.survival?.decayPerDay || 500;
-      const startObj = new Date(gameState?.seasonStart || "2026/08/12");
-      const daysDiff = Math.max(1, Math.floor((new Date() - startObj) / (1000 * 60 * 60 * 24)));
-      const maxHp = gameState?.survival?.maxHp || 10000;
-      const currentHp = Math.floor(maxHp - (daysDiff * decayPerDay) + (heroStat.totalCalories || 0) + (heroStat.totalTrimp || 0) * 1.5);
-      const isDead = currentHp <= 0;
+      const surv = typeof window.computeHeroSurvival === 'function'
+        ? window.computeHeroSurvival(heroStat, gameState)
+        : { currentHp: 0, isDead: false, food: heroStat.totalCalories || 0, scavenge: (heroStat.totalTrimp || 0) * 1.5, survivedDays: 1, daysElapsed: 1 };
       
       kpiContainer.innerHTML = `
         <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
-          <span class="text-[11px] ${isDead ? 'text-red-500' : 'text-emerald-400'} block">❤️ 當前生存值</span>
-          <span class="text-lg font-black font-rpg ${isDead ? 'text-slate-600' : 'text-amber-400'}">${Math.max(0, currentHp).toLocaleString()}</span>
+          <span class="text-[11px] ${surv.isDead ? 'text-red-500' : 'text-emerald-400'} block">❤️ 當前生存值</span>
+          <span class="text-lg font-black font-rpg ${surv.isDead ? 'text-slate-600' : 'text-amber-400'}">${Math.max(0, surv.currentHp).toLocaleString()}</span>
         </div>
         <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
           <span class="text-[11px] text-slate-400 block">🍖 狩獵總熱量 (基礎HP)</span>
-          <span class="text-lg font-black font-rpg text-rose-400">+${Math.round(heroStat.totalCalories || 0).toLocaleString()}</span>
+          <span class="text-lg font-black font-rpg text-rose-400">+${Math.round(surv.food).toLocaleString()}</span>
         </div>
         <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
           <span class="text-[11px] text-slate-400 block">🎒 搜刮總物資 (外加HP)</span>
-          <span class="text-lg font-black font-rpg text-blue-400">+${Math.round((heroStat.totalTrimp || 0) * 1.5).toLocaleString()}</span>
+          <span class="text-lg font-black font-rpg text-blue-400">+${Math.round(surv.scavenge).toLocaleString()}</span>
         </div>
         <div class="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
-          <span class="text-[11px] text-slate-400 block">⏱️ 荒野堅持天數</span>
-          <span class="text-lg font-black font-rpg text-cyan-400">${heroStat.validWorkouts || 0} 天</span>
+          <span class="text-[11px] text-slate-400 block">⏱️ 開賽至今的存活天數</span>
+          <span class="text-lg font-black font-rpg text-cyan-400">${surv.survivedDays} 天 <span class="text-[10px] text-slate-500 font-normal">/ 賽季第 ${surv.daysElapsed} 天</span></span>
         </div>
       `;
     } else if (activeMode === "base_builder") {
@@ -1407,12 +1299,13 @@ function loadHeroViewerData() {
     }
   }
 
-  // Heart Rate Zone Distribution
+  // Heart Rate Zone Distribution (優先統計本賽季有效運動，若本季尚無則顯示歷史全部)
   const zoneCard = document.getElementById('hero-hr-zone-card');
   if (zoneCard) {
-    const totalActsCount = Math.max(1, heroActs.length);
+    const targetActs = inSeasonActs.length > 0 ? inSeasonActs : heroActs.filter(a => !a.isExcluded);
+    const totalActsCount = Math.max(1, targetActs.length);
     let z1 = 0, z2 = 0, z3 = 0, z4 = 0, z5 = 0;
-    heroActs.forEach(a => {
+    targetActs.forEach(a => {
       const avg = a.avgHr || 0;
       const m = hero.maxHr || 185;
       if (avg < 0.60 * m) z1++;
@@ -1431,7 +1324,7 @@ function loadHeroViewerData() {
     zoneCard.innerHTML = `
       <div class="flex items-center justify-between text-xs">
         <span class="font-bold text-slate-200">💓 心率強度區間分佈分析</span>
-        <span class="text-[11px] text-slate-400 font-mono">共 ${heroActs.length} 次運動</span>
+        <span class="text-[11px] text-slate-400 font-mono">本季有效 ${inSeasonActs.length} 次 (歷史總計 ${heroActs.length} 次)</span>
       </div>
       <div class="w-full h-3 bg-slate-900 rounded-full overflow-hidden flex">
         <div style="width: ${p1}%;" class="bg-slate-600" title="Zone 1 恢復: ${p1}%"></div>
@@ -1461,6 +1354,7 @@ function filterViewerActivities() {
   const heroActs = (gameState?.activities || []).filter(a => a.hero === selectedViewerHero);
   const query = (document.getElementById('viewer-search-input')?.value || '').toLowerCase().trim();
   const sportFilter = document.getElementById('viewer-sport-filter')?.value || '';
+  const minDur = gameState?.summary?.minDurationMinutes || gameState?.boss?.rules?.minDurationMinutes || 30;
 
   let filtered = heroActs.filter(a => {
     if (sportFilter && a.type !== sportFilter) return false;
@@ -1506,7 +1400,7 @@ function filterViewerActivities() {
 
   filtered.forEach(a => {
     const tr = document.createElement('tr');
-    tr.className = `hover:bg-slate-900/60 transition ${a.isExcluded ? 'opacity-40 line-through bg-rose-950/20' : ''}`;
+    tr.className = `hover:bg-slate-900/60 transition ${a.isExcluded ? 'opacity-40 line-through bg-rose-950/20' : (!a.isValidAttack ? 'opacity-60' : '')}`;
 
     const isNumericStrava = /^\d+$/.test(String(a.id));
     const sourceBadge = isNumericStrava 
@@ -1517,7 +1411,7 @@ function filterViewerActivities() {
     if (a.isExcluded) {
       scoreColHtml = `<span class="text-rose-400 font-bold">GM作廢</span>`;
     } else if (!a.isValidAttack) {
-      scoreColHtml = `<span class="text-slate-500">${a.inSeason ? "未滿30分" : "非本賽季"}</span>`;
+      scoreColHtml = `<span class="text-slate-500">${a.inSeason ? `未滿${minDur}分` : "非本賽季"}</span>`;
     } else {
       if (activeMode === "classic") {
         scoreColHtml = `<span class="text-amber-400 font-bold">${Math.round(a.calories || 0)} kcal</span>`;
@@ -1582,12 +1476,13 @@ function openHeroDetailModal(heroName) {
   const heroStat = (heroStatsList || []).find(h => (h.name || "").trim() === cleanName) || {};
   const heroActs = (gameState?.activities || []).filter(a => (a.hero || "").trim() === cleanName);
   const cls = RPG_CLASSES[hero.rpgClass || "狂戰士"] || RPG_CLASSES["狂戰士"];
+  const minDur = gameState?.summary?.minDurationMinutes || gameState?.boss?.rules?.minDurationMinutes || 30;
 
-  const seasonStartStr = gameState?.seasonStart || gameState?.boss?.seasonStart || "2026/08/12";
-  const seasonEndStr = gameState?.seasonEnd || gameState?.boss?.seasonEnd || "2026/08/31";
-  const startD = parseActivityDate(seasonStartStr);
-  const endD = parseActivityDate(seasonEndStr);
-  if (endD) endD.setHours(23, 59, 59, 999);
+  const meta = typeof window.getSeasonTimeMeta === 'function'
+    ? window.getSeasonTimeMeta(gameState)
+    : { seasonStartStr: gameState?.seasonStart || '2026/08/12', seasonEndStr: gameState?.seasonEnd || '2026/08/31' };
+  const startD = parseActivityDate(meta.seasonStartStr, false);
+  const endD = parseActivityDate(meta.seasonEndStr, true);
 
   const inSeasonActs = heroActs.filter(a => {
     if (a.isExcluded || a.isValidAttack === false) return false;
@@ -1602,7 +1497,7 @@ function openHeroDetailModal(heroName) {
   const totalDur = inSeasonActs.reduce((acc, a) => acc + (a.duration || 0), 0);
   const totalCal = inSeasonActs.reduce((acc, a) => acc + (a.calories || 0), 0);
 
-    title.innerHTML = `
+  title.innerHTML = `
     <div class="flex items-center space-x-3 w-full">
       <div class="w-14 h-14 rounded-lg bg-slate-800 overflow-hidden border-2 border-slate-700 flex-shrink-0 relative">
         <img src="${hero.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${hero.name}`}" class="w-full h-full object-cover">
@@ -1612,7 +1507,7 @@ function openHeroDetailModal(heroName) {
            <div class="flex items-center flex-wrap gap-1">
                <span class="font-bold text-white tracking-wide text-lg">${hero.name}</span>
                <span class="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 text-[10px]">${hero.guild}</span>
-               ${(gameState?.activeMode === 'rpg_talent' || gameState?.activeMode === 'rpg' || (typeof currentView !== 'undefined' && currentView === 'chronicles' && getAllSnapshots().find(s => s.id === selectedChronicle)?.type === 'rpg')) ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${cls.bg} ml-1">${cls.badge} ${cls.name}</span>` : ''}
+               ${(gameState?.activeMode === 'rpg_talent' || gameState?.activeMode === 'rpg' || (typeof currentMainTab !== 'undefined' && currentMainTab === 'chronicles' && getAllSnapshots().find(s => s.id === selectedChronicle)?.type === 'rpg')) ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${cls.bg} ml-1">${cls.badge} ${cls.name}</span>` : ''}
            </div>
            
            <!-- 明確的上傳按鈕 -->
@@ -1705,29 +1600,26 @@ function openHeroDetailModal(heroName) {
       </div>
     `;
   } else if (activeMode === "survival") {
-    const decayPerDay = gameState?.survival?.decayPerDay || 500;
-    const startObj = new Date(gameState?.seasonStart || "2026/08/12");
-    const daysDiff = Math.max(1, Math.floor((new Date() - startObj) / (1000 * 60 * 60 * 24)));
-    const maxHp = gameState?.survival?.maxHp || 10000;
-    const currentHp = Math.floor(maxHp - (daysDiff * decayPerDay) + (heroStat.totalCalories || 0) + (heroStat.totalTrimp || 0) * 1.5);
-    const isDead = currentHp <= 0;
+    const surv = typeof window.computeHeroSurvival === 'function'
+      ? window.computeHeroSurvival(heroStat, gameState)
+      : { currentHp: 0, isDead: false, food: heroStat.totalCalories || 0, scavenge: (heroStat.totalTrimp || 0) * 1.5, survivedDays: 1 };
     
     modalCardsHtml = `
       <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-        <span class="text-[10px] ${isDead ? 'text-red-500' : 'text-emerald-400'} block">當前生存值</span>
-        <span class="font-rpg font-bold ${isDead ? 'text-slate-600' : 'text-amber-400'} text-sm">${Math.max(0, currentHp).toLocaleString()}</span>
+        <span class="text-[10px] ${surv.isDead ? 'text-red-500' : 'text-emerald-400'} block">當前生存值</span>
+        <span class="font-rpg font-bold ${surv.isDead ? 'text-slate-600' : 'text-amber-400'} text-sm">${Math.max(0, surv.currentHp).toLocaleString()}</span>
       </div>
       <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
         <span class="text-[10px] text-slate-400 block">狩獵熱量 (HP)</span>
-        <span class="font-rpg font-bold text-rose-400 text-sm">+${Math.round(heroStat.totalCalories || 0).toLocaleString()}</span>
+        <span class="font-rpg font-bold text-rose-400 text-sm">+${Math.round(surv.food).toLocaleString()}</span>
       </div>
       <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
         <span class="text-[10px] text-slate-400 block">搜刮物資 (TRIMP)</span>
-        <span class="font-rpg font-bold text-blue-400 text-sm">+${Math.round((heroStat.totalTrimp || 0) * 1.5).toLocaleString()}</span>
+        <span class="font-rpg font-bold text-blue-400 text-sm">+${Math.round(surv.scavenge).toLocaleString()}</span>
       </div>
       <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-        <span class="text-[10px] text-slate-400 block">有效生存天數</span>
-        <span class="font-rpg font-bold text-cyan-400 text-sm">${heroStat.validWorkouts || 0} 荒野日</span>
+        <span class="text-[10px] text-slate-400 block">開賽至今存活天數</span>
+        <span class="font-rpg font-bold text-cyan-400 text-sm">${surv.survivedDays} 天</span>
       </div>
     `;
   } else if (activeMode === "base_builder") {
@@ -1776,8 +1668,9 @@ function openHeroDetailModal(heroName) {
     </div>
 
     <div class="space-y-2">
-      <div class="flex items-center justify-between text-xs border-b border-slate-800 pb-1.5">
-        <span class="font-bold text-slate-200">🏃 近期運動歷程 (共 ${heroActs.length} 筆)</span>
+      <div class="flex flex-wrap items-center justify-between text-xs border-b border-slate-800 pb-1.5 gap-1">
+        <span class="font-bold text-slate-200">🏃 近期運動歷程 (本季有效 ${inSeasonActs.length} 筆 / 歷史共 ${heroActs.length} 筆)</span>
+        <span class="text-[10px] text-slate-400">⏱️ 僅計入賽季內單次滿 ${minDur} 分鐘之運動</span>
       </div>
       <div class="max-h-60 overflow-y-auto space-y-1.5 pr-1 text-xs">
         ${heroActs.slice(0, 10).map(a => {
@@ -1787,7 +1680,11 @@ function openHeroDetailModal(heroName) {
             : `<span class="text-[10px] text-amber-400">手動</span>`;
           
           let actScoreTag = "";
-          if (activeMode === "classic") {
+          if (a.isExcluded) {
+            actScoreTag = `<span class="font-mono font-bold text-rose-400 text-[11px]">GM作廢 (不計分)</span>`;
+          } else if (!a.isValidAttack) {
+            actScoreTag = `<span class="font-mono text-slate-500 text-[11px]">${a.inSeason ? `未滿${minDur}分 (不計分)` : "非本賽季 (不計分)"}</span>`;
+          } else if (activeMode === "classic") {
             actScoreTag = `<span class="font-mono font-bold text-amber-400 text-xs">${Math.round(a.calories || 0)} kcal</span>`;
           } else if (activeMode === "rpg_talent" || activeMode === "rpg") {
             actScoreTag = `<span class="font-mono font-bold text-purple-400 text-xs">⚡ ${Math.round(a.combatPower || a.damage || 0).toLocaleString()} CP</span>`;
@@ -1804,7 +1701,7 @@ function openHeroDetailModal(heroName) {
           }
 
           return `
-            <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between">
+            <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between ${a.isExcluded ? 'opacity-40 line-through' : (!a.isValidAttack ? 'opacity-60' : '')}">
               <div>
                 <div class="flex items-center space-x-1.5">
                   <span class="font-bold text-white">${a.title || a.type}</span>
@@ -1855,10 +1752,22 @@ function populateChroniclesDropdown() {
     return;
   }
 
+  const iconMap = {
+    classic: '🏆',
+    rpg: '⚔️',
+    rpg_talent: '⚔️',
+    world_boss: '🐉',
+    boss: '🐉',
+    faction_war: '🏰',
+    survival: '☠️',
+    base_builder: '🔨',
+    bingo: '🧩'
+  };
+
   visibleSnapshots.forEach(arc => {
     const opt = document.createElement('option');
     opt.value = arc.id;
-    const typeIcon = arc.type === 'classic' ? '🏆' : (arc.type === 'rpg' ? '⚔️' : '🐉');
+    const typeIcon = iconMap[arc.type] || '🐉';
     opt.innerText = `${typeIcon} ${arc.seasonTitle || arc.id} (${arc.seasonPeriod || ''})`;
     select.appendChild(opt);
   });
@@ -1893,6 +1802,14 @@ function renderChroniclesView() {
     lore = `<div class="mb-4 bg-slate-900 border-l-4 border-rose-500 p-4 rounded-r-xl shadow-lg"><h2 class="text-xl font-black text-rose-500 mb-1">【資料片三】世界 Boss 討伐 (World Raid)</h2><p class="text-slate-300 text-sm">上古神獸降臨！這次我們沒有對手，因為全伺服器必須團結一致，將熱量化為物理重擊、將 TRIMP 化為無情的魔法火砲。用無氧極限 (MaxGap) 觸發爆擊，在賽季結束前將這個怪物的血條削成灰燼！</p></div>`;
   } else if (snap.type === "rpg" || snap.type === "rpg_talent") {
     lore = `<div class="mb-6 bg-slate-900 border-l-4 border-blue-500 p-4 rounded-r-xl shadow-lg"><h2 class="text-xl font-black text-blue-400 mb-1">【資料片二】RPG 職業覺醒 (Class Talents)</h2><p class="text-slate-300 text-sm">英雄們覺醒了專屬的天賦：狂戰士靠高心跳壓榨極限，遊俠依賴平穩的燃脂區間堆疊傷害，聖騎士化身團隊的血牛，而刺客則尋求極致的痛苦密度。找出你的定位，發揮 100% 的職業加成吧！</p></div>`;
+  } else if (snap.type === "faction_war") {
+    lore = `<div class="mb-6 bg-slate-900 border-l-4 border-emerald-500 p-4 rounded-r-xl shadow-lg"><h2 class="text-xl font-black text-emerald-400 mb-1">【資料片四】雙城激戰 (Faction War)</h2><p class="text-slate-300 text-sm">全服公會編入兩大對立陣營！極限無氧化為猛烈攻城砲火，穩定有氧化為修復己方城牆的物資！</p></div>`;
+  } else if (snap.type === "survival") {
+    lore = `<div class="mb-6 bg-slate-900 border-l-4 border-amber-500 p-4 rounded-r-xl shadow-lg"><h2 class="text-xl font-black text-amber-500 mb-1">【資料片五】飢餓法則 (Survival Rules)</h2><p class="text-slate-300 text-sm">身處嚴酷的荒野沙漠，毒圈每日無情扣血！唯有透過真實運動狩獵熱量與搜刮 TRIMP 物資，才能在荒野存活到最後一刻！</p></div>`;
+  } else if (snap.type === "base_builder") {
+    lore = `<div class="mb-6 bg-slate-900 border-l-4 border-cyan-500 p-4 rounded-r-xl shadow-lg"><h2 class="text-xl font-black text-cyan-400 mb-1">【資料片六】鋼鐵要塞 (Iron Fortress)</h2><p class="text-slate-300 text-sm">全服英雄的汗水化作木材、鋼鐵與魔法神石，齊心協力突破偏食危機，共同打造不朽的鐵峰堡壘！</p></div>`;
+  } else if (snap.type === "bingo") {
+    lore = `<div class="mb-6 bg-slate-900 border-l-4 border-fuchsia-500 p-4 rounded-r-xl shadow-lg"><h2 class="text-xl font-black text-fuchsia-400 mb-1">【資料片七】戰神拼圖 (Relic Bingo)</h2><p class="text-slate-300 text-sm">精準解題與團隊協作的終極試煉！全服英雄分工合作點亮古代傳承石板九宮格！</p></div>`;
   } else {
     lore = `<div class="mb-6 bg-slate-900 border-l-4 border-amber-500 p-4 rounded-r-xl shadow-lg"><h2 class="text-xl font-black text-amber-500 mb-1">【資料片一】經典競技 (Classic Arena)</h2><p class="text-slate-300 text-sm">在這個最初的競技場，靠的是最純粹的汗水與毅力。沒有花俏的魔法防護，只有真實的痛苦轉換為榮耀。團隊的勝敗，取決於每一個人的參與度，只要有人偷懶跌破 30 分鐘門檻，都會拖累整個公會的均分！</p></div>`;
   }
@@ -2194,14 +2111,265 @@ function renderChroniclesView() {
                     <td class="p-3 text-[11px] text-slate-400">
                       <span class="font-bold text-slate-200">${meta.passiveName}</span>：${meta.passiveDesc}
                     </td>
-                    <td class="p-3 font-mono">${h.workouts || 0}次 • ${h.zone2 || 0}次燃脂</td>
-                    <td class="p-3 font-mono text-cyan-300">${h.trimp || 0} • 落差 ${h.maxGap || 0}</td>
+                    <td class="p-3 font-mono">${h.workouts || h.validWorkouts || 0}次 • ${h.zone2 || h.zone2Count || 0}次燃脂</td>
+                    <td class="p-3 font-mono text-cyan-300">${Math.round((h.trimp || h.totalTrimp || 0) * 10) / 10} • 落差 ${h.maxGap || 0}</td>
                     <td class="p-3 text-right font-mono font-bold text-amber-400 text-sm">${(h.combatPower || h.totalDamage || 0).toLocaleString()}</td>
                   </tr>
                 `;
               }).join("")}
             </tbody>
           </table>
+        </div>
+      </div>
+    `;
+  }
+
+  // =========================================================================
+  // CASE 4: Faction War Snapshot (資料片四：雙城激戰)
+  // =========================================================================
+  else if (snap.type === "faction_war" || snap.factionData) {
+    const fd = snap.factionData || {};
+    const f1 = fd.faction1 || { name: "🟢 均衡聯盟", hp: 500000, currentHp: 500000, dmg: 0, repair: 0, guilds: [] };
+    const f2 = fd.faction2 || { name: "🔴 狂怒部落", hp: 500000, currentHp: 500000, dmg: 0, repair: 0, guilds: [] };
+    const f1Pct = Math.min(100, Math.max(0, ((f1.currentHp || 0) / Math.max(1, f1.hp || 500000)) * 100));
+    const f2Pct = Math.min(100, Math.max(0, ((f2.currentHp || 0) / Math.max(1, f2.hp || 500000)) * 100));
+    const hStats = snap.heroStats || [];
+
+    container.innerHTML = lore + `
+      <div class="bg-gradient-to-r from-emerald-950/40 via-slate-900 to-rose-950/40 p-6 rounded-3xl border border-emerald-500/40 shadow-xl space-y-2">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center space-x-2">
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">🏛️ 雙城激戰歷史快照</span>
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-500/20 text-amber-300 border border-amber-500/40">🔒 時間凍結</span>
+            <span class="text-xs text-slate-400 font-mono">${snap.seasonPeriod || ""}</span>
+          </div>
+          <span class="text-[11px] text-slate-400 font-mono">封存時間：${snap.archivedAt || ""}</span>
+        </div>
+        <h2 class="text-2xl font-black text-white font-title">${snap.seasonTitle}</h2>
+        <p class="text-xs text-slate-300 flex items-center space-x-1.5">
+          <span>🔒</span>
+          <span class="font-bold text-emerald-300">${snap.statusLabel || "本賽季雙城激戰已圓滿結算封存"}</span>
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div class="bg-slate-900/80 rounded-3xl p-6 border border-emerald-500/30 text-center">
+          <div class="text-xs text-emerald-500 font-bold mb-2">守護陣營</div>
+          <h3 class="text-3xl font-black text-white font-title mb-2">${f1.name}</h3>
+          <p class="text-xs text-slate-400 mb-4">所屬公會：${(f1.guilds || []).join(', ') || '無'}</p>
+          <div class="text-4xl font-rpg font-black text-emerald-400 mb-2">${Math.round(f1.currentHp || 0).toLocaleString()}</div>
+          <div class="w-full h-4 bg-slate-950 rounded-full overflow-hidden border border-slate-700"><div class="h-full bg-emerald-500" style="width:${f1Pct}%"></div></div>
+          <div class="mt-4 flex justify-between text-xs text-slate-400">
+            <span>承受打擊: <b class="text-rose-400">${Math.round(f2.dmg || 0).toLocaleString()}</b></span>
+            <span>修復值: <b class="text-cyan-400">+${Math.round(f1.repair || 0).toLocaleString()}</b></span>
+          </div>
+        </div>
+        <div class="bg-slate-900/80 rounded-3xl p-6 border border-rose-500/30 text-center">
+          <div class="text-xs text-rose-500 font-bold mb-2">狂怒陣營</div>
+          <h3 class="text-3xl font-black text-white font-title mb-2">${f2.name}</h3>
+          <p class="text-xs text-slate-400 mb-4">所屬公會：${(f2.guilds || []).join(', ') || '無'}</p>
+          <div class="text-4xl font-rpg font-black text-rose-400 mb-2">${Math.round(f2.currentHp || 0).toLocaleString()}</div>
+          <div class="w-full h-4 bg-slate-950 rounded-full overflow-hidden border border-slate-700"><div class="h-full bg-rose-500" style="width:${f2Pct}%"></div></div>
+          <div class="mt-4 flex justify-between text-xs text-slate-400">
+            <span>承受打擊: <b class="text-rose-400">${Math.round(f1.dmg || 0).toLocaleString()}</b></span>
+            <span>修復值: <b class="text-cyan-400">+${Math.round(f2.repair || 0).toLocaleString()}</b></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-slate-900/80 border border-slate-800 rounded-3xl p-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <h4 class="text-xs font-bold text-rose-400 mb-2">🔥 攻城毀滅者排行榜 (歷史封存)</h4>
+          <div class="space-y-2">
+            ${[...hStats].map(h => ({ ...h, dmg: h.siegeDmg !== undefined ? h.siegeDmg : ((h.totalTrimp || 0) * 10 + (h.maxGap || 0) * 100) })).sort((a,b)=>b.dmg-a.dmg).map((h, i) => `
+              <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between text-xs cursor-pointer hover:border-rose-500/50 transition">
+                <span class="font-bold text-white">${i+1}. ${h.name} <span class="text-[10px] text-slate-500">(${h.guild})</span></span>
+                <span class="font-rpg font-bold text-rose-400">${Math.round(h.dmg).toLocaleString()}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+        <div>
+          <h4 class="text-xs font-bold text-cyan-400 mb-2">🛠️ 城牆守護者排行榜 (歷史封存)</h4>
+          <div class="space-y-2">
+            ${[...hStats].map(h => ({ ...h, rep: h.repairVal !== undefined ? h.repairVal : ((h.zone2Count || 0) * 5000 + (h.totalCalories || 0)) })).sort((a,b)=>b.rep-a.rep).map((h, i) => `
+              <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between text-xs cursor-pointer hover:border-cyan-500/50 transition">
+                <span class="font-bold text-white">${i+1}. ${h.name} <span class="text-[10px] text-slate-500">(${h.guild})</span></span>
+                <span class="font-rpg font-bold text-cyan-400">+${Math.round(h.rep).toLocaleString()}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // =========================================================================
+  // CASE 5: Survival Snapshot (資料片五：飢餓法則)
+  // =========================================================================
+  else if (snap.type === "survival" || snap.survivalData) {
+    const sd = snap.survivalData || {};
+    const maxHp = sd.maxHp || 3000;
+    const hList = (sd.heroes || snap.heroStats || []).sort((a,b) => (b.currentHp || 0) - (a.currentHp || 0));
+
+    container.innerHTML = lore + `
+      <div class="bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-950 p-6 rounded-3xl border border-amber-500/40 shadow-xl space-y-2">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center space-x-2">
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-500/20 text-amber-300 border border-amber-500/40">🏛️ 飢餓法則歷史快照</span>
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">🔒 時間凍結</span>
+            <span class="text-xs text-slate-400 font-mono">${snap.seasonPeriod || ""}</span>
+          </div>
+          <span class="text-[11px] text-slate-400 font-mono">封存時間：${snap.archivedAt || ""}</span>
+        </div>
+        <h2 class="text-2xl font-black text-white font-title">${snap.seasonTitle}</h2>
+        <p class="text-xs text-slate-300 flex items-center space-x-1.5">
+          <span>🔒</span>
+          <span class="font-bold text-amber-300">${snap.statusLabel || "本賽季荒野求生已圓滿結算封存"}</span>
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        ${hList.map((h, i) => {
+          const isDead = (h.currentHp || 0) <= 0;
+          return `
+            <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-900/80 p-4 border rounded-2xl cursor-pointer transition ${isDead ? 'border-slate-800 opacity-50 grayscale' : 'border-amber-500/40 relative overflow-hidden hover:border-amber-400'}">
+              <div class="flex items-center space-x-3 mb-3">
+                <div class="w-10 h-10 rounded-xl bg-slate-800 overflow-hidden border border-slate-700">
+                  <img src="${h.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${h.name}`}" class="w-full h-full object-cover">
+                </div>
+                <div>
+                  <h4 class="font-bold text-white">${h.name} <span class="text-[10px] text-slate-500">(${h.guild})</span></h4>
+                  <p class="text-[10px] ${isDead ? 'text-red-500' : 'text-emerald-400'} font-bold">${isDead ? '☠️ 已被荒野吞噬' : '🟢 存活成功'} • 存活 ${h.survivedDays || 0} 天</p>
+                </div>
+                ${i === 0 && !isDead ? '<span class="absolute top-2 right-2 text-2xl">👑</span>' : ''}
+              </div>
+              <div class="text-[10px] text-slate-400 flex justify-between mb-1">
+                <span>最終生存值 HP</span>
+                <span class="text-amber-400 font-mono text-sm font-bold">${Math.max(0, Math.round(h.currentHp || 0)).toLocaleString()}</span>
+              </div>
+              <div class="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
+                <div class="h-full bg-amber-500" style="width: ${isDead ? 0 : Math.min(100, Math.max(0, ((h.currentHp || 0) / maxHp) * 100))}%"></div>
+              </div>
+              <div class="mt-3 pt-2 border-t border-slate-800 flex justify-between text-[9px] text-slate-500">
+                <span>狩獵熱量: +${Math.floor(h.food || h.totalCalories || 0).toLocaleString()}</span>
+                <span>搜刮物資: +${Math.floor(h.scavenge || ((h.totalTrimp || 0) * 1.5)).toLocaleString()}</span>
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  // =========================================================================
+  // CASE 6: Base Builder Snapshot (資料片六：鋼鐵要塞)
+  // =========================================================================
+  else if (snap.type === "base_builder" || snap.baseData) {
+    const bd = snap.baseData || {};
+    const hStats = snap.heroStats || [];
+    container.innerHTML = lore + `
+      <div class="bg-gradient-to-r from-blue-950/40 via-slate-900 to-slate-950 p-6 rounded-3xl border border-blue-500/40 shadow-xl space-y-2">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center space-x-2">
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-500/20 text-blue-300 border border-blue-500/40">🏛️ 鋼鐵要塞歷史快照</span>
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">🔒 時間凍結</span>
+            <span class="text-xs text-slate-400 font-mono">${snap.seasonPeriod || ""}</span>
+          </div>
+          <span class="text-[11px] text-slate-400 font-mono">封存時間：${snap.archivedAt || ""}</span>
+        </div>
+        <h2 class="text-2xl font-black text-white font-title">${snap.seasonTitle} (最終等級 Level ${bd.level || 1})</h2>
+        <p class="text-xs text-slate-300 flex items-center space-x-1.5">
+          <span>🔒</span>
+          <span class="font-bold text-blue-300">${snap.statusLabel || "本賽季要塞建設已圓滿結算封存"}</span>
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-slate-900 p-4 rounded-2xl border border-emerald-500/40 text-center">
+          <div class="text-lg font-bold text-emerald-400">🌳 總木材產量</div>
+          <div class="text-2xl font-mono font-black text-white mt-1">${Math.round(bd.totalWood || 0).toLocaleString()}</div>
+        </div>
+        <div class="bg-slate-900 p-4 rounded-2xl border border-blue-500/40 text-center">
+          <div class="text-lg font-bold text-blue-400">⚙️ 總鋼鐵產量</div>
+          <div class="text-2xl font-mono font-black text-white mt-1">${Math.round(bd.totalSteel || 0).toLocaleString()}</div>
+        </div>
+        <div class="bg-slate-900 p-4 rounded-2xl border border-purple-500/40 text-center">
+          <div class="text-lg font-bold text-purple-400">🔮 總魔法原石</div>
+          <div class="text-2xl font-mono font-black text-white mt-1">${Math.round(bd.totalMana || 0).toLocaleString()}</div>
+        </div>
+      </div>
+
+      <div class="bg-slate-900/80 border border-slate-800 rounded-3xl p-5 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div>
+          <h4 class="text-xs font-bold text-emerald-400 mb-2">🌳 頂級伐木工</h4>
+          <div class="space-y-2">
+            ${[...hStats].sort((a,b)=>(b.totalCalories||0)-(a.totalCalories||0)).slice(0,5).map((h,i)=>`
+              <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer">
+                <span class="text-white font-bold">${i+1}. ${h.name}</span>
+                <span class="text-emerald-400 font-mono font-bold">${Math.round(h.totalCalories||0).toLocaleString()}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+        <div>
+          <h4 class="text-xs font-bold text-blue-400 mb-2">⚙️ 鋼鐵礦工</h4>
+          <div class="space-y-2">
+            ${[...hStats].sort((a,b)=>(b.totalTrimp||0)-(a.totalTrimp||0)).slice(0,5).map((h,i)=>`
+              <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer">
+                <span class="text-white font-bold">${i+1}. ${h.name}</span>
+                <span class="text-blue-400 font-mono font-bold">${Math.round(h.totalTrimp||0).toLocaleString()}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+        <div>
+          <h4 class="text-xs font-bold text-purple-400 mb-2">🔮 魔法煉金術師</h4>
+          <div class="space-y-2">
+            ${[...hStats].map(h=>({...h, mana: (h.maxGap||0)*10 + (h.zone2Count||0)*50})).sort((a,b)=>b.mana-a.mana).slice(0,5).map((h,i)=>`
+              <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer">
+                <span class="text-white font-bold">${i+1}. ${h.name}</span>
+                <span class="text-purple-400 font-mono font-bold">${Math.round(h.mana).toLocaleString()}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // =========================================================================
+  // CASE 7: Relic Bingo Snapshot (資料片七：戰神拼圖)
+  // =========================================================================
+  else if (snap.type === "bingo" || snap.bingoData) {
+    const bgd = snap.bingoData || {};
+    const grid = bgd.grid || [];
+    container.innerHTML = lore + `
+      <div class="bg-gradient-to-r from-fuchsia-950/40 via-slate-900 to-slate-950 p-6 rounded-3xl border border-fuchsia-500/40 shadow-xl space-y-2">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center space-x-2">
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40">🏛️ 戰神拼圖歷史快照</span>
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">🔒 時間凍結</span>
+            <span class="text-xs text-slate-400 font-mono">${snap.seasonPeriod || ""}</span>
+          </div>
+          <span class="text-[11px] text-slate-400 font-mono">封存時間：${snap.archivedAt || ""}</span>
+        </div>
+        <h2 class="text-2xl font-black text-white font-title">${snap.seasonTitle} (點亮 ${grid.filter(g=>g.ok).length} / 9 格)</h2>
+        <p class="text-xs text-slate-300 flex items-center space-x-1.5">
+          <span>🔒</span>
+          <span class="font-bold text-fuchsia-300">${snap.statusLabel || "本賽季戰神拼圖已圓滿結算封存"}</span>
+        </p>
+      </div>
+
+      <div class="max-w-3xl mx-auto bg-slate-950 p-6 rounded-3xl border border-slate-800 shadow-2xl">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          ${grid.map(g => `
+            <div class="aspect-square flex flex-col justify-center items-center text-center p-4 rounded-2xl border-2 ${g.ok ? 'bg-fuchsia-900/30 border-fuchsia-500' : 'bg-slate-900/50 border-slate-800 opacity-60'}">
+              <div class="text-3xl mb-2">${g.ok ? '✅' : '🔒'}</div>
+              <h4 class="font-bold text-white text-sm mb-1">${g.key}</h4>
+              <p class="text-[10px] text-slate-400">${g.desc}</p>
+            </div>
+          `).join("")}
         </div>
       </div>
     `;
@@ -2220,7 +2388,6 @@ function renderChroniclesView() {
     };
     const heroList = (snap.heroStats || snap.allHeroes || snap.topHeroes || []).sort((a,b) => (b.totalDamage || b.score || 0) - (a.totalDamage || a.score || 0));
     const guildList = snap.guildContributions || snap.guilds || [];
-    const activities = snap.activities || [];
 
     const maxHp = boss.maxHp || snap.bossMaxHp || 350000;
     const currHp = Math.max(0, maxHp - (summary.totalDamage || 0));
@@ -2394,139 +2561,254 @@ function renderChroniclesView() {
 
   if (window.lucide) lucide.createIcons();
 }
+
 /**
- * 📸 WYSIWYG 真・現場畫面 100% 完整深拷貝快照 (所見即所得)
- * 直接封存當前遊戲看板上的所有數值、出勤與戰功，不丟失任何手動打卡！
+ * 建構當前資料片完整歷史快照 Payload (支援全部 7 個資料片)
  */
-async function captureCurrentLiveSnapshot(customName) {
+function buildSnapshotPayloadForMode(customTitle) {
   const activeMode = gameState?.activeMode || "world_boss";
   const bossData = gameState?.boss || {};
-  let defaultTitle = "2026 S1 季末結算快照";
-  if (activeMode === "classic") defaultTitle = "2026 S1 • 經典競技結算快照";
-  else if (activeMode === "rpg_talent") defaultTitle = "2026 S1 • RPG 職業天賦結算快照";
-  else if (activeMode === "world_boss") defaultTitle = `${bossData.name || "世界 Boss 討伐戰"} (現場結算快照)`;
+  const meta = typeof window.getSeasonTimeMeta === 'function'
+    ? window.getSeasonTimeMeta(gameState)
+    : { seasonStartStr: gameState?.seasonStart || '2026/08/12', seasonEndStr: gameState?.seasonEnd || '2026/08/31', totalDays: 20 };
 
-  const title = customName || prompt("請輸入快照名稱 (Snapshot Title)：", defaultTitle);
-  if (!title) return;
+  const defaultTitles = {
+    classic: "2026 • 經典競技結算快照",
+    rpg: "2026 • RPG 職業天賦結算快照",
+    rpg_talent: "2026 • RPG 職業天賦結算快照",
+    world_boss: `${bossData.name || "世界 Boss 討伐戰"} (現場結算快照)`,
+    faction_war: "2026 • 雙城激戰結算快照",
+    survival: "2026 • 飢餓法則結算快照",
+    base_builder: "2026 • 鋼鐵要塞結算快照",
+    bingo: "2026 • 戰神拼圖結算快照"
+  };
 
+  const title = (customTitle || defaultTitles[activeMode] || "2026 季末結算快照").trim();
   const now = new Date();
-  const timeStampStr = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
-
-  let snapPayload = null;
+  const timeStampStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+  const seasonPeriod = `${meta.seasonStartStr} ~ ${meta.seasonEndStr} (共 ${meta.totalDays} 天)`;
 
   if (activeMode === "classic") {
-    snapPayload = {
+    const liveClassic = calculateLiveClassicMetrics();
+    return {
       id: `snapshot_classic_${Date.now()}`,
       type: "classic",
-      seasonTitle: title.trim(),
-      seasonPeriod: `${bossData.seasonStart || "2026/07/27"} ~ ${bossData.seasonEnd || "2026/08/11"}`,
+      seasonTitle: title,
+      seasonPeriod,
       archivedAt: timeStampStr,
       status: "completed",
       statusLabel: "🏁 本賽季經典競技已圓滿結算封存",
       isVisible: true,
-      classicData: gameState?.classic0717 || window.frozenClassic0717 || {}
+      classicData: liveClassic,
+      champions: liveClassic.champions,
+      teamMetrics: liveClassic.teamMetrics,
+      guildList: liveClassic.guildList
     };
   } else if (activeMode === "rpg_talent" || activeMode === "rpg") {
-    const heroList = (heroStatsList || gameState?.heroes || []).map(h => {
-      const cls = RPG_CLASSES[h.rpgClass || "狂戰士"] || RPG_CLASSES["狂戰士"];
-      return {
-        ...h,
-        rpgClass: h.rpgClass || "狂戰士",
-        combatPower: h.combatPower || h.totalDamage || 0
-      };
-    }).sort((a, b) => (b.combatPower || 0) - (a.combatPower || 0));
-
-    const classMasters = {};
-    Object.keys(RPG_CLASSES).forEach(cName => {
-      const cand = heroList.find(h => h.rpgClass === cName);
-      if (cand) classMasters[cName] = cand;
-    });
-
-    snapPayload = {
+    const liveRpg = calculateLiveRPGStats();
+    return {
       id: `snapshot_rpg_${Date.now()}`,
       type: "rpg",
-      seasonTitle: title.trim(),
-      seasonPeriod: `${bossData.seasonStart || "2026/08/12"} ~ ${bossData.seasonEnd || "2026/08/31"}`,
+      seasonTitle: title,
+      seasonPeriod,
       archivedAt: timeStampStr,
       status: "completed",
       statusLabel: "🏁 本賽季職業天賦爭霸已圓滿結算封存",
       isVisible: true,
-      classMasters: classMasters,
-      guildSynergyList: gameState?.guilds || [],
-      heroRpgList: heroList
+      classMasters: liveRpg.classMasters,
+      guildSynergyList: liveRpg.guildSynergyList,
+      heroRpgList: liveRpg.heroRpgList
     };
-  } else {
-    // World Boss
-    const sortedHeroes = [...(heroStatsList || [])].sort((a, b) => (b.totalDamage || 0) - (a.totalDamage || 0));
-    const summary = gameState?.summary || {
-      totalPhys: sortedHeroes.reduce((s, h) => s + (h.physDmg || 0), 0),
-      totalMag: sortedHeroes.reduce((s, h) => s + (h.magDmg || 0), 0),
-      totalCrit: sortedHeroes.reduce((s, h) => s + (h.critDmg || 0), 0),
-      totalDamage: sortedHeroes.reduce((s, h) => s + (h.totalDamage || 0), 0)
-    };
+  } else if (activeMode === "faction_war") {
+    const guildList = gameState?.guilds || [];
+    let faction1 = { name: gameState?.faction?.f1Name || "🟢 均衡聯盟", hp: gameState?.faction?.baseHp || 500000, dmg: 0, repair: 0, guilds: [] };
+    let faction2 = { name: gameState?.faction?.f2Name || "🔴 狂怒部落", hp: gameState?.faction?.baseHp || 500000, dmg: 0, repair: 0, guilds: [] };
+    guildList.forEach((g, idx) => {
+      const targetF = idx % 2 === 0 ? faction1 : faction2;
+      targetF.guilds.push(g.name);
+      const gHeroes = (heroStatsList || []).filter(h => h.guild === g.name);
+      targetF.dmg += gHeroes.reduce((s, h) => s + (h.totalTrimp || 0) * 10 + (h.maxGap || 0) * 100, 0);
+      targetF.repair += gHeroes.reduce((s, h) => s + (h.zone2Count || 0) * 5000 + (h.totalCalories || 0), 0);
+    });
+    faction1.currentHp = Math.max(0, faction1.hp - faction2.dmg + faction1.repair);
+    faction2.currentHp = Math.max(0, faction2.hp - faction1.dmg + faction2.repair);
 
-    const guildStats = {};
-    (gameState?.guilds || []).forEach(g => { guildStats[g.name] = { ...g, totalDamage: 0 }; });
-    sortedHeroes.forEach(h => { if (guildStats[h.guild]) guildStats[h.guild].totalDamage += (h.totalDamage || 0); });
-    const sortedGuilds = Object.values(guildStats).sort((a, b) => b.totalDamage - a.totalDamage);
-
-    const maxHp = bossData.maxHp || 350000;
-    const finalHp = bossData.currentHp !== undefined ? bossData.currentHp : Math.max(0, maxHp - summary.totalDamage);
-
-    snapPayload = {
-      id: `snapshot_boss_${Date.now()}`,
-      type: "world_boss",
-      seasonTitle: title.trim(),
-      seasonPeriod: `${bossData.seasonStart || "2026/08/12"} ~ ${bossData.seasonEnd || "2026/08/31"}`,
+    return {
+      id: `snapshot_faction_${Date.now()}`,
+      type: "faction_war",
+      seasonTitle: title,
+      seasonPeriod,
       archivedAt: timeStampStr,
       status: "completed",
-      statusLabel: "🏁 本賽季討伐戰已圓滿結算封存",
+      statusLabel: "🏁 本賽季雙城激戰已圓滿結算封存",
       isVisible: true,
-      boss: {
-        name: bossData.name || "🌩️ 墮落雷神・索爾 (Fallen Thor)",
-        avatar: bossData.avatar || "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80",
-        description: bossData.description || "索爾受到雷霆魔劍侵蝕陷入瘋狂！全服英雄透過每日汗水鍛鍊，轉化為真實輸出！",
-        maxHp: maxHp,
-        currentHp: finalHp,
-        seasonStart: bossData.seasonStart || "2026/08/12",
-        seasonEnd: bossData.seasonEnd || "2026/08/31"
+      factionData: { faction1, faction2 },
+      heroStats: (heroStatsList || []).map(h => ({
+        ...h,
+        siegeDmg: Math.round((h.totalTrimp || 0) * 10 + (h.maxGap || 0) * 100),
+        repairVal: Math.round((h.zone2Count || 0) * 5000 + (h.totalCalories || 0))
+      }))
+    };
+  } else if (activeMode === "survival") {
+    const survHeroes = (heroStatsList || []).map(h => {
+      const s = typeof window.computeHeroSurvival === 'function' ? window.computeHeroSurvival(h, gameState) : { currentHp: 0, isDead: false, food: h.totalCalories || 0, scavenge: (h.totalTrimp || 0) * 1.5, survivedDays: 1, maxHp: 3000 };
+      return { ...h, ...s };
+    }).sort((a, b) => b.currentHp - a.currentHp);
+
+    return {
+      id: `snapshot_survival_${Date.now()}`,
+      type: "survival",
+      seasonTitle: title,
+      seasonPeriod,
+      archivedAt: timeStampStr,
+      status: "completed",
+      statusLabel: "🏁 本賽季飢餓法則已圓滿結算封存",
+      isVisible: true,
+      survivalData: {
+        maxHp: gameState?.survival?.maxHp || 3000,
+        decayPerDay: gameState?.survival?.decayPerDay || 500,
+        heroes: survHeroes
       },
-      summary: summary,
-      heroStats: sortedHeroes.map((h, idx) => ({
-        rank: idx + 1,
-        name: h.name,
-        guild: h.guild,
-        avatar: h.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${h.name}`,
-        validWorkouts: h.validWorkouts || 0,
-        physDmg: h.physDmg || 0,
-        magDmg: h.magDmg || 0,
-        critDmg: h.critDmg || 0,
-        totalDamage: h.totalDamage || 0,
-        maxGap: h.maxGap || 0,
-        badge: idx === 0 ? "👑" : (idx === 1 ? "🥈" : (idx === 2 ? "🥉" : ""))
-      })),
-      guildContributions: sortedGuilds,
-      activities: (gameState?.activities || []).filter(a => a.isValidAttack).slice(0, 25)
+      heroStats: survHeroes
+    };
+  } else if (activeMode === "base_builder") {
+    let totalWood = 0, totalSteel = 0, totalMana = 0;
+    (heroStatsList || []).forEach(h => {
+      totalWood += (h.totalCalories || 0);
+      totalSteel += (h.totalTrimp || 0);
+      totalMana += (h.maxGap || 0) * 10 + (h.zone2Count || 0) * 50;
+    });
+    const baseW = Number(gameState?.base?.woodTarget) || 10000;
+    const baseS = Number(gameState?.base?.steelTarget) || 500;
+    const baseM = Number(gameState?.base?.manaTarget) || 500;
+    let lvl = 1, wReq = baseW, sReq = baseS, mReq = baseM;
+    while (totalWood >= wReq && totalSteel >= sReq && totalMana >= mReq && lvl < 10) {
+      lvl++;
+      wReq += Math.max(100, Math.round(baseW * 1.5));
+      sReq += Math.max(50, Math.round(baseS * 1.5));
+      mReq += Math.max(50, Math.round(baseM * 1.5));
+    }
+
+    return {
+      id: `snapshot_base_${Date.now()}`,
+      type: "base_builder",
+      seasonTitle: title,
+      seasonPeriod,
+      archivedAt: timeStampStr,
+      status: "completed",
+      statusLabel: "🏁 本賽季鋼鐵要塞已圓滿結算封存",
+      isVisible: true,
+      baseData: { level: lvl, totalWood, totalSteel, totalMana },
+      heroStats: [...(heroStatsList || [])]
+    };
+  } else if (activeMode === "bingo") {
+    const acts = (gameState?.activities || []).filter(a => a.isValidAttack);
+    const m = gameState?.bingo?.multiplier || 1.0;
+    const grid = [
+      { key: "長征先鋒", desc: `全服累計 ${Math.ceil(10 * m)} 次超過 1 小時的訓練`, ok: acts.filter(a => a.duration >= 60).length >= Math.ceil(10 * m) },
+      { key: "燃脂大師", desc: `解鎖 ${Math.ceil(20 * m)} 次完美的 Zone 2 綠色指標`, ok: acts.filter(a => a.isZone2).length >= Math.ceil(20 * m) },
+      { key: "心跳超載", desc: `全服累積引擎衝力 TRIMP 破 ${Math.ceil(3000 * m).toLocaleString()}`, ok: acts.reduce((s, a) => s + (a.trimp || 0), 0) >= 3000 * m },
+      { key: "爆發限界", desc: `出現 ${Math.ceil(5 * m)} 次落差大於 70 的魔鬼心率訓練`, ok: acts.filter(a => a.gapVal >= 70).length >= Math.ceil(5 * m) },
+      { key: "紀律部隊", desc: `伺服器至少有 ${Math.max(1, Math.ceil(3 * m))} 人達成 10 次出勤`, ok: (heroStatsList || []).filter(h => (h.validWorkouts || 0) >= 10).length >= Math.max(1, Math.ceil(3 * m)) },
+      { key: "脂肪燃燒者", desc: `全服大熱量！總計燃燒 ${(50000 * m).toLocaleString()} 卡路里`, ok: acts.reduce((s, a) => s + (a.calories || 0), 0) >= 50000 * m },
+      { key: "死神擦肩", desc: `尋找 ${Math.max(1, Math.ceil(2 * m))} 名極限 MaxGap 突破 80 的勇者`, ok: (heroStatsList || []).filter(h => (h.maxGap || 0) >= 80).length >= Math.max(1, Math.ceil(2 * m)) },
+      { key: "真金不怕火", desc: `全服至少 ${Math.max(1, Math.ceil(5 * m))} 次有效運動且手動打卡在 ${Math.max(1, Math.floor(5 / m))} 次內`, ok: acts.length >= Math.max(1, Math.ceil(5 * m)) && acts.filter(a => a.isManual).length <= Math.max(1, Math.floor(5 / m)) },
+      { key: "冒險起點", desc: "中央免費贈送的補給空間", ok: true }
+    ];
+
+    return {
+      id: `snapshot_bingo_${Date.now()}`,
+      type: "bingo",
+      seasonTitle: title,
+      seasonPeriod,
+      archivedAt: timeStampStr,
+      status: "completed",
+      statusLabel: "🏁 本賽季戰神拼圖已圓滿結算封存",
+      isVisible: true,
+      bingoData: { grid, multiplier: m },
+      heroStats: [...(heroStatsList || [])]
     };
   }
 
+  // Default: World Boss
+  const sortedHeroes = [...(heroStatsList || [])].sort((a, b) => (b.totalDamage || 0) - (a.totalDamage || 0));
+  const summary = gameState?.summary || {
+    totalPhys: sortedHeroes.reduce((s, h) => s + (h.physDmg || 0), 0),
+    totalMag: sortedHeroes.reduce((s, h) => s + (h.magDmg || 0), 0),
+    totalCrit: sortedHeroes.reduce((s, h) => s + (h.critDmg || 0), 0),
+    totalDamage: sortedHeroes.reduce((s, h) => s + (h.totalDamage || 0), 0)
+  };
+  const guildStats = {};
+  (gameState?.guilds || []).forEach(g => { guildStats[g.name] = { ...g, totalDamage: 0 }; });
+  sortedHeroes.forEach(h => { if (guildStats[h.guild]) guildStats[h.guild].totalDamage += (h.totalDamage || 0); });
+  const sortedGuilds = Object.values(guildStats).sort((a, b) => b.totalDamage - a.totalDamage);
+  const maxHp = bossData.maxHp || 350000;
+  const finalHp = bossData.currentHp !== undefined ? bossData.currentHp : Math.max(0, maxHp - summary.totalDamage);
+
+  return {
+    id: `snapshot_boss_${Date.now()}`,
+    type: "world_boss",
+    seasonTitle: title,
+    seasonPeriod,
+    archivedAt: timeStampStr,
+    status: "completed",
+    statusLabel: "🏁 本賽季討伐戰已圓滿結算封存",
+    isVisible: true,
+    boss: {
+      name: bossData.name || "🌩️ 墮落雷神・索爾 (Fallen Thor)",
+      avatar: bossData.avatar || "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80",
+      description: bossData.description || "索爾受到雷霆魔劍侵蝕陷入瘋狂！全服英雄透過每日汗水鍛鍊，轉化為真實輸出！",
+      maxHp: maxHp,
+      currentHp: finalHp,
+      seasonStart: meta.seasonStartStr,
+      seasonEnd: meta.seasonEndStr
+    },
+    summary: summary,
+    heroStats: sortedHeroes.map((h, idx) => ({
+      rank: idx + 1,
+      name: h.name,
+      guild: h.guild,
+      avatar: h.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${h.name}`,
+      validWorkouts: h.validWorkouts || 0,
+      physDmg: h.physDmg || 0,
+      magDmg: h.magDmg || 0,
+      critDmg: h.critDmg || 0,
+      totalDamage: h.totalDamage || 0,
+      maxGap: h.maxGap || 0,
+      badge: idx === 0 ? "👑" : (idx === 1 ? "🥈" : (idx === 2 ? "🥉" : ""))
+    })),
+    guildContributions: sortedGuilds,
+    activities: (gameState?.activities || []).filter(a => a.isValidAttack).slice(0, 25)
+  };
+}
+window.buildSnapshotPayloadForMode = buildSnapshotPayloadForMode;
+
+async function captureCurrentLiveSnapshot(customName) {
+  const snapPayload = buildSnapshotPayloadForMode(customName);
+  if (!customName) {
+    const inputTitle = prompt("請輸入快照名稱 (Snapshot Title)：", snapPayload.seasonTitle);
+    if (!inputTitle) return;
+    snapPayload.seasonTitle = inputTitle.trim();
+  }
+
   try {
-    const res = await fetch("/api/snapshots/save", {
+    if (gameState) {
+      if (!gameState.snapshots) gameState.snapshots = [];
+      gameState.snapshots.unshift(snapPayload);
+      gameState.archivedSeasons = gameState.snapshots;
+    }
+    if (window.supabase) {
+      await window.supabase.upsert('game_config', [{ key: 'snapshots', value: gameState.snapshots }], 'key');
+    }
+    await fetch("/api/snapshots/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ snapshot: snapPayload })
-    });
-    if (res.ok) {
-      alert(`🎉 快照【${title}】建立成功！已 100% 複製當前現場戰況並封存至【過往英雄史】！`);
-      if (gameState) {
-        if (!gameState.snapshots) gameState.snapshots = [];
-        gameState.snapshots.unshift(snapPayload);
-        gameState.archivedSeasons = gameState.snapshots;
-      }
-      populateChroniclesDropdown();
-    }
+    }).catch(() => {});
+    alert(`🎉 快照【${snapPayload.seasonTitle}】建立成功！已 100% 複製當前現場戰況並封存至【過往英雄史】！`);
+    populateChroniclesDropdown();
   } catch (e) {
-    alert(`🎉 快照【${title}】已於本地建立！`);
+    alert(`🎉 快照【${snapPayload.seasonTitle}】已於本地建立！`);
   }
 }
 window.captureCurrentLiveSnapshot = captureCurrentLiveSnapshot;
@@ -2577,7 +2859,10 @@ function renderFactionWarView() {
   container.innerHTML = `
     <!-- Lore / Story -->
     <div class="mb-6 bg-slate-900 border-l-4 border-emerald-500 p-4 rounded-r-xl shadow-lg">
-      <h2 class="text-xl font-black text-emerald-400 mb-1">【資料片四】雙城激戰 (Faction War)</h2>
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-2">
+        <h2 class="text-xl font-black text-emerald-400">【資料片四】雙城激戰 (Faction War)</h2>
+        ${getSeasonBannerHtml('emerald')}
+      </div>
       <p class="text-slate-300 text-sm leading-relaxed">
         戰火蔓延！全服公會已被強制編入兩大對立陣營。<br>
         ⚔️ <strong>摧毀敵城：</strong> 你的極限無氧化為猛烈砲火！<span class="text-rose-400 font-mono font-bold tracking-wider">[ 攻城傷害 = TRIMP × 10 + MaxGap × 100 ]</span><br>
@@ -2687,32 +2972,42 @@ function renderSurvivalView() {
   if (!container) return;
 
   const heroList = gameState?.heroStats || [];
-  const today = new Date();
-  const startObj = parseActivityDate(gameState?.seasonStart || "2026/08/12") || new Date("2026/08/12");
-  const daysDiff = Math.max(1, Math.floor((today - startObj) / (1000 * 60 * 60 * 24)));
-  const decayPerDay = gameState?.survival?.decayPerDay || 500;
-  const currentPenalty = daysDiff * decayPerDay;
-  const maxHp = gameState?.survival?.maxHp || 10000;
+  const sampleSurv = window.computeHeroSurvival ? window.computeHeroSurvival({}, gameState) : {
+    maxHp: gameState?.survival?.maxHp || 10000,
+    decayPerDay: gameState?.survival?.decayPerDay || 500,
+    currentPenalty: 500,
+    daysElapsed: 1
+  };
+  const maxHp = sampleSurv.maxHp;
+  const decayPerDay = sampleSurv.decayPerDay;
+  const currentPenalty = sampleSurv.currentPenalty;
 
   const survivingHeroes = heroList.map(h => {
-      const food = (h.totalCalories || 0); // Calories -> HP regen
-      const scavenge = (h.totalTrimp || 0) * 1.5; // Trimp -> bonus scavenge
-      const currentHp = Math.floor(maxHp - currentPenalty + food + scavenge);
-      const isDead = currentHp <= 0;
-      return { ...h, currentHp, isDead, food, scavenge };
+      const surv = window.computeHeroSurvival ? window.computeHeroSurvival(h, gameState) : {
+        currentHp: Math.floor(maxHp - currentPenalty + (h.totalCalories || 0) + (h.totalTrimp || 0) * 1.5),
+        isDead: false,
+        food: (h.totalCalories || 0),
+        scavenge: (h.totalTrimp || 0) * 1.5,
+        survivedDays: 1,
+        daysElapsed: 1
+      };
+      return { ...h, ...surv };
   }).sort((a,b) => b.currentHp - a.currentHp);
 
   container.innerHTML = `
     <!-- Lore / Story -->
     <div class="mb-6 bg-slate-900 border-l-4 border-amber-500 p-4 rounded-r-xl shadow-lg">
-      <h2 class="text-xl font-black text-amber-500 mb-1">【資料片五】飢餓法則 (Survival Rules)</h2>
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-2">
+        <h2 class="text-xl font-black text-amber-500">【資料片五】飢餓法則 (Survival Rules)</h2>
+        ${getSeasonBannerHtml('amber')}
+      </div>
       <p class="text-slate-300 text-sm leading-relaxed">
-        身處嚴酷的荒野沙漠，每個人開局擁有 ${maxHp.toLocaleString()} 點生存值。每天毒圈都會自動剝奪大家 ${decayPerDay.toLocaleString()} 點生命線（目前全服已流失 ${currentPenalty.toLocaleString()} HP）！<br>
+        身處嚴酷的荒野沙漠，每個人開局擁有 ${maxHp.toLocaleString()} 點生存值。每天毒圈都會自動剝奪大家 ${decayPerDay.toLocaleString()} 點生命線（開賽第 ${sampleSurv.daysElapsed} 天，目前全服已流失 ${currentPenalty.toLocaleString()} HP）！<br>
         🍖 <strong>外出狩獵與搜刮：</strong> <span class="text-emerald-400 font-mono font-bold tracking-wider">[ 狩獵補血 = Calories × 1 ]</span> / <span class="text-amber-300 font-mono font-bold tracking-wider">[ 搜刮物資 = TRIMP × 1.5 ]</span><br>
-        ☠️ <strong>淘汰與結算：</strong> <span class="text-rose-400 font-mono font-bold tracking-wider">[ 最終生存HP = 最大血量 - (天數 × 每日衰減) + 狩獵補血 + 搜刮物資 ]</span>
+        ☠️ <strong>淘汰與結算：</strong> <span class="text-rose-400 font-mono font-bold tracking-wider">[ 最終生存HP = 最大血量 - 累積毒圈扣血 + 狩獵補血 + 搜刮物資 ]</span>
       </p>
       <div class="mt-2 text-[10px] text-slate-400 bg-slate-900/50 p-2 rounded border border-slate-700/50">
-          <p><span class="text-amber-500 font-bold">⏱️ 系統判斷規則：</span> 所有鍛鍊僅採計單次持續 <strong>${gameState?.summary?.minDurationMinutes || gameState?.boss?.rules?.minDurationMinutes || 30}分鐘</strong> 以上的運動。</p>
+          <p><span class="text-amber-500 font-bold">⏱️ 系統判斷規則：</span> 所有鍛鍊僅採計本賽季內且單次持續 <strong>${gameState?.summary?.minDurationMinutes || gameState?.boss?.rules?.minDurationMinutes || 30}分鐘</strong> 以上的有效運動。</p>
           <p>• <strong>TRIMP (衝力)：</strong>計算方式為 時間 × (均心率÷MaxHR) × <i>e</i>^(1.92×(均心率÷MaxHR))</p>
       </div>
     </div>
@@ -2726,7 +3021,7 @@ function renderSurvivalView() {
                </div>
                <div>
                   <h4 class="font-bold text-white">${h.name} <span class="text-[10px] text-slate-500">(${h.guild})</span></h4>
-                  <p class="text-[10px] ${h.isDead ? 'text-red-500' : 'text-emerald-400'} font-bold">${h.isDead ? '☠️ 已被荒野吞噬' : '🟢 存活中'}</p>
+                  <p class="text-[10px] ${h.isDead ? 'text-red-500' : 'text-emerald-400'} font-bold">${h.isDead ? '☠️ 已被荒野吞噬' : '🟢 存活中'} · ⏱️ 開賽至今存活 ${h.survivedDays}/${h.daysElapsed} 天</p>
                </div>
                ${i === 0 && !h.isDead ? '<span class="absolute top-2 right-2 text-2xl">👑</span>' : ''}
             </div>
@@ -2783,7 +3078,10 @@ function renderBaseBuilderView() {
   container.innerHTML = `
     <!-- Lore / Story -->
     <div class="mb-6 bg-slate-900 border-l-4 border-blue-500 p-4 rounded-r-xl shadow-lg">
-      <h2 class="text-xl font-black text-blue-400 mb-1">【資料片六】鋼鐵要塞 (Iron Fortress)</h2>
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-2">
+        <h2 class="text-xl font-black text-blue-400">【資料片六】鋼鐵要塞 (Iron Fortress)</h2>
+        ${getSeasonBannerHtml('blue')}
+      </div>
       <p class="text-slate-300 text-sm leading-relaxed">
         這不是一個人的戰鬥，全服玩家的汗水將化作資源，我們正在合力升級這座村莊基地！<br>
         🌳 <strong>糧倉與木材：</strong> 燃燒熱量提供基礎建材。<span class="text-emerald-400 font-mono font-bold tracking-wider">[ 木材產量 = Calories ]</span><br>
@@ -2890,6 +3188,8 @@ function renderBingoView() {
 
   const acts = (gameState?.activities || []).filter(a => a.isValidAttack);
   const m = gameState?.bingo?.multiplier || 1.0;
+  const minWearableRequired = Math.max(1, Math.ceil(5 * m));
+  const maxManualAllowed = Math.max(1, Math.floor(5 / m));
   
   // 9 Check conditions
   const c1 = acts.filter(a => a.duration >= 60).length >= Math.ceil(10 * m);
@@ -2899,7 +3199,7 @@ function renderBingoView() {
   const c5 = (gameState?.heroStats || []).filter(h => (h.validWorkouts || 0) >= 10).length >= Math.max(1, Math.ceil(3 * m));
   const c6 = acts.reduce((s, a) => s + (a.calories || 0), 0) >= 50000 * m;
   const c7 = (gameState?.heroStats || []).filter(h => (h.maxGap || 0) >= 80).length >= Math.max(1, Math.ceil(2 * m));
-  const c8 = acts.filter(a => a.isManual).length <= Math.max(1, Math.floor(5 / m)); // Reward for auto-sync hardware
+  const c8 = acts.length >= minWearableRequired && acts.filter(a => a.isManual).length <= maxManualAllowed; // Must have >= minWearableRequired valid workouts AND manual <= maxManualAllowed
   const c9 = true; // Free space
 
   const grid = [
@@ -2910,14 +3210,25 @@ function renderBingoView() {
      { key: "紀律部隊", desc: `伺服器至少有 ${Math.max(1, Math.ceil(3 * m))} 人達成 10 次出勤`, ok: c5 },
      { key: "脂肪燃燒者", desc: `全服大熱量！總計燃燒 ${(50000 * m).toLocaleString()} 卡路里`, ok: c6 },
      { key: "死神擦肩", desc: `尋找 ${Math.max(1, Math.ceil(2 * m))} 名極限 MaxGap 突破 80 的勇者`, ok: c7 },
-     { key: "真金不怕火", desc: `賽季手動打卡(無穿戴數據) 次數控制在 ${Math.max(1, Math.floor(5 / m))} 次內`, ok: c8 },
+     { key: "真金不怕火", desc: `全服累積至少 ${minWearableRequired} 次有效訓練，且手動打卡控制在 ${maxManualAllowed} 次內`, ok: c8 },
      { key: "冒險起點", desc: "中央免費贈送的補給空間", ok: c9 },
   ];
+
+  // Count >=60m workouts per hero for 長征先鋒 leaderboard
+  const longWorkoutCountByHero = {};
+  acts.forEach(a => {
+    if ((a.duration || 0) >= 60 && a.heroName) {
+      longWorkoutCountByHero[a.heroName] = (longWorkoutCountByHero[a.heroName] || 0) + 1;
+    }
+  });
 
   container.innerHTML = `
     <!-- Lore / Story -->
     <div class="mb-6 bg-slate-900 border-l-4 border-fuchsia-500 p-4 rounded-r-xl shadow-lg">
-      <h2 class="text-xl font-black text-fuchsia-400 mb-1">【資料片七】戰神拼圖 (Relic Bingo)</h2>
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-2">
+        <h2 class="text-xl font-black text-fuchsia-400">【資料片七】戰神拼圖 (Relic Bingo)</h2>
+        ${getSeasonBannerHtml('fuchsia')}
+      </div>
       <p class="text-slate-300 text-sm leading-relaxed">
         這一次我們不比數值暴力，比的是「精準解題」與「團隊溝通」！<br>
         全服共享一張龐大的九宮格石板，每一格都有專屬的「解鎖條件」。<br>
@@ -2964,7 +3275,7 @@ function renderBingoView() {
            </div>
         </div>
 
-        <!-- 訓練時長貢獻 (這需要在 hero 活動算, 但簡單點用出勤次數替代或時長) -->
+        <!-- 訓練時長貢獻 -->
         <div class="bg-slate-900/60 p-4 border border-slate-800 rounded-2xl">
            <h4 class="text-xs font-bold text-amber-400 mb-2">⌚ 紀律部隊 <span class="text-[9px] text-slate-500 ml-1">總出勤次數</span></h4>
            <div class="space-y-2">
@@ -3009,17 +3320,16 @@ function renderBingoView() {
            </div>
         </div>
 
-        
-        <!-- Elevation 貢獻 -->
+        <!-- 長征先鋒 (單次滿60分鐘次數) -->
         <div class="bg-slate-900/60 p-4 border border-slate-800 rounded-2xl">
-           <h4 class="text-xs font-bold text-teal-400 mb-2">🏔️ 征服巔峰 <span class="text-[9px] text-slate-500 ml-1">累積爬升 (Elevation)</span></h4>
+           <h4 class="text-xs font-bold text-teal-400 mb-2">⏳ 長征先鋒 <span class="text-[9px] text-slate-500 ml-1">單次 ≥ 60 分鐘次數</span></h4>
            <div class="space-y-2">
              ${(gameState?.heroStats || []).map(h => ({
-                ...h, res: (h.totalElevation || 0)
-             })).sort((a,b)=>b.res-a.res).slice(0, 3).map((h, i) => `
+                ...h, res: (longWorkoutCountByHero[h.name] || 0)
+             })).sort((a,b)=>b.res-a.res || (b.totalDuration||0)-(a.totalDuration||0)).slice(0, 3).map((h, i) => `
                <div onclick="openHeroDetailModal('${h.name}')" class="bg-slate-950 p-2 text-xs rounded-xl border border-slate-800 flex justify-between cursor-pointer hover:border-teal-500/50 transition">
                   <div class="flex items-center space-x-1.5 w-full overflow-hidden"><span class="text-slate-500 font-bold mr-1">${i+1}.</span>${renderHeroTag(h.name, "bg-transparent border-0 p-0 text-[11px] font-bold w-full justify-start truncate")}</div>
-                  <span class="text-teal-400 font-bold font-mono">${Math.round(h.res).toLocaleString()} m</span>
+                  <span class="text-teal-400 font-bold font-mono">${Math.round(h.res).toLocaleString()} 次</span>
                </div>
              `).join('')}
            </div>

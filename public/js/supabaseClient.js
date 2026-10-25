@@ -9,7 +9,7 @@ const SUPABASE_CONFIG = {
 };
 
 const supabase = {
-  async fetch(table, params = "") {
+  async fetchPage(table, params = "") {
     const url = `${SUPABASE_CONFIG.url}/rest/v1/${table}${params ? `?${params}` : ""}`;
     const res = await fetch(url, {
       headers: {
@@ -23,6 +23,29 @@ const supabase = {
       throw new Error(`Supabase fetch [${table}] failed (${res.status}): ${err}`);
     }
     return await res.json();
+  },
+
+  async fetch(table, params = "") {
+    if (params.includes("limit=") || params.includes("offset=")) {
+      return await this.fetchPage(table, params);
+    }
+    return await this.fetchAll(table, params);
+  },
+
+  async fetchAll(table, params = "select=*") {
+    const pageSize = 1000;
+    let offset = 0;
+    let allRows = [];
+    const baseParams = params || "select=*";
+    while (true) {
+      const pageQuery = `${baseParams}&limit=${pageSize}&offset=${offset}`;
+      const rows = await this.fetchPage(table, pageQuery);
+      if (!Array.isArray(rows) || rows.length === 0) break;
+      allRows = allRows.concat(rows);
+      if (rows.length < pageSize) break;
+      offset += pageSize;
+    }
+    return allRows;
   },
 
   async insert(table, data) {

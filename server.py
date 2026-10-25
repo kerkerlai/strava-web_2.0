@@ -127,17 +127,19 @@ def calculate_full_season_stats(data):
             ratio = avg_hr / h_info['maxHr']
             trimp = dur * ratio * math.exp(1.92 * ratio)
         
-        is_zone2 = (0.60 * h_info['maxHr'] <= avg_hr <= 0.75 * h_info['maxHr']) if h_info['maxHr'] > 0 else False
+        is_zone2 = (0.60 * h_info['maxHr'] <= avg_hr < 0.75 * h_info['maxHr']) if h_info['maxHr'] > 0 else False
 
         h = hero_stats_map[hero_name]
-        h['totalWorkouts'] += 1
-        h['totalDuration'] += dur
-        h['totalCalories'] += cal
-        if is_zone2:
-            h['zone2Count'] += 1
+        if in_season:
+            h['totalWorkouts'] += 1
 
         if dur >= min_dur and in_season:
             h['validWorkouts'] += 1
+            h['totalDuration'] += dur
+            h['totalCalories'] += cal
+            h['trimp'] += trimp
+            if is_zone2:
+                h['zone2Count'] += 1
             p_dmg = round(cal)
             m_dmg = round(trimp * mag_mult) if trimp > 0 else 0
 

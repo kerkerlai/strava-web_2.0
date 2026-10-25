@@ -10,6 +10,7 @@ import time
 import sys
 import json
 import html
+import math
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
@@ -63,17 +64,42 @@ def load_exclude_keywords_from_supabase():
     return ["羽球", "Badminton"]
 
 def get_existing_activity_ids():
-    """從 Supabase activities 表取得所有現存活動 ID，避免重複寫入"""
-    url = f"{SUPABASE_URL}/rest/v1/activities?select=id"
+    """從 Supabase activities 表分頁取得所有現存活動 ID，突破 1,000 筆上限，避免重複寫入覆蓋 GM 修改"""
+    ids = set()
+    page_size = 1000
+    offset = 0
     try:
-        r = requests.get(url, headers=SUPABASE_HEADERS, timeout=10)
-        if r.status_code == 200:
-            ids = set(str(item["id"]) for item in r.json())
-            print(f"📋 [Supabase] 資料庫現存 {len(ids)} 筆歷史活動紀錄")
-            return ids
+        while True:
+            url = f"{SUPABASE_URL}/rest/v1/activities?select=id&limit={page_size}&offset={offset}"
+            r = requests.get(url, headers=SUPABASE_HEADERS, timeout=15)
+            if r.status_code != 200:
+                break
+            rows = r.json()
+            if not isinstance(rows, list) or len(rows) == 0:
+                break
+            for item in rows:
+                if "id" in item:
+                    ids.add(str(item["id"]))
+            if len(rows) < page_size:
+                break
+            offset += page_size
+        print(f"📋 [Supabase] 資料庫現存 {len(ids)} 筆歷史活動紀錄")
+        return ids
     except Exception as e:
         print(f"⚠️ 無法取得現存活動 ID: {e}")
-    return set()
+    return ids
+
+def seconds_to_mins(secs):
+    """將秒數轉為分鐘數；未滿 1800 秒 (30 分鐘) 採無條件捨去，避免 29m35s 四捨五入誤判為滿 30 分鐘"""
+    try:
+        s = float(secs or 0)
+        if s <= 0:
+            return 0
+        if s < 1800:
+            return int(math.floor(s / 60.0))
+        return int(round(s / 60.0))
+    except Exception:
+        return 0
 
 def calculate_calories(avg_hr, duration_mins):
     try:
@@ -186,8 +212,8 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
                 print(f"  🚫 略過排除關鍵字活動：{act_name} [類型: {sport_type}] (#{act_id})")
                 continue
 
-            elapsed = act.get("elapsedTime", 0)
-            moving_time_mins = round(elapsed / 60) if elapsed else 0
+            elapsed = act.get("movingTime") or act.get("elapsedTime") or 0
+            moving_time_mins = seconds_to_mins(elapsed) if elapsed else 0
             distance_km = 0
             elevation_m = 0
             avg_hr = 0
@@ -197,13 +223,17 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
 
             for st in act.get("stats", []):
                 val_str = str(st.get("value", ""))
-                sub = str(st.get("key", ""))
-                if "Time" in val_str or "stat_one" in sub:
-                    m_min = re.search(r"(\d+)m", val_str)
-                    m_hr = re.search(r"(\d+)h", val_str)
+                sub = f"{st.get('key', '')} {st.get('subtitle', '')}"
+                if "Time" in val_str or "Time" in sub or "時間" in sub or "stat_one" in sub or re.search(r"\b\d+h\b|\b\d+m\b", val_str):
+                    m_min = re.search(r"(\d+)\s*m", val_str)
+                    m_hr = re.search(r"(\d+)\s*h", val_str)
+                    m_sec = re.search(r"(\d+)\s*s", val_str)
                     h = int(m_hr.group(1)) if m_hr else 0
                     m = int(m_min.group(1)) if m_min else 0
-                    if h or m: moving_time_mins = h * 60 + m
+                    if h or m:
+                        moving_time_mins = h * 60 + m
+                    elif m_sec and not moving_time_mins:
+                        moving_time_mins = 0
                 elif "bpm" in val_str:
                     m_bpm = re.search(r"(\d+)", val_str)
                     if m_bpm: avg_hr = int(m_bpm.group(1))
@@ -271,7 +301,7 @@ def scrape_strava_activities(strava_cookie, athlete_profiles, exclude_keywords):
                         if hr_list and not max_hr:
                             max_hr = max(hr_list)
                         if time_list and not moving_time_mins:
-                            moving_time_mins = round(time_list[-1] / 60.0)
+                            moving_time_mins = seconds_to_mins(time_list[-1])
                         if dist_list and not distance_km:
                             distance_km = round(dist_list[-1] / 1000.0, 2)
                         print(f"    📡 Streams 補充 -> 時長: {moving_time_mins}分, 平均HR: {avg_hr} bpm, 最大HR: {max_hr} bpm, 距離: {distance_km} km")
